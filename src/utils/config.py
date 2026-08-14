@@ -7,8 +7,8 @@ load_dotenv()
 class Config:
     # 核心大模型配置
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-    BASE_URL = os.getenv("BASE_URL", "https://cloud.hongqiye.com/v1")
-    MODEL_NAME = os.getenv("MODEL_NAME", "deepseek-v4-flash")
+    BASE_URL = os.getenv("BASE_URL", "https://api.deepseek.com")
+    MODEL_NAME = os.getenv("MODEL_NAME", "deepseek-chat")
 
     # 搜索与工具配置 (支持灵活切换)
     SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "tavily")  # 可选 'tavily' 或 'ddg'

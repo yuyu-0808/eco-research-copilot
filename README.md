@@ -86,8 +86,8 @@ cp .env.example .env
 | 环境变量 | 必填 | 说明 |
 |---------|:---:|------|
 | `DEEPSEEK_API_KEY` | ✅ | LLM API Key |
-| `BASE_URL` | — | API 网关地址，默认 DeepSeek 兼容网关 |
-| `MODEL_NAME` | — | 模型名，默认 `deepseek-v4-flash` |
+| `BASE_URL` | — | API 网关地址，默认官方 `https://api.deepseek.com` |
+| `MODEL_NAME` | — | 模型名，默认 `deepseek-chat` |
 | `SEARCH_PROVIDER` | — | `tavily`（推荐）/ `ddg`（本地代理） |
 | `TAVILY_API_KEY` | ✅ | 使用 Tavily 搜索时必填 |
 | `MAX_COLLECT_ROUNDS` | — | 采集-质检循环最大轮数，默认 3 |
