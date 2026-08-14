@@ -450,14 +450,12 @@ def nav_items():
 
 
 def goto(page):
-    st.session_state["nav_radio"] = PAGE_LABELS.get(page, "工作台")
     st.session_state["page"] = page
     st.rerun()
 
 
 def set_report(data, page="report"):
     st.session_state["report_data"] = data
-    st.session_state["nav_radio"] = PAGE_LABELS.get(page, "报告预览")
     st.session_state["page"] = page
     st.rerun()
 
@@ -484,8 +482,8 @@ with st.sidebar:
     key_map = {label: key for key, label in nav}
     cur_label = next((label for key, label in nav if key == st.session_state["page"]), labels[0])
 
-    # 同步：若 nav_radio 不在当前可选列表（如首次加载/切换后列表变化），对齐到当前页
-    if st.session_state.get("nav_radio") not in labels:
+    # 同步：radio 实例化前把选中态对齐到当前 page（Streamlit 1.61 禁止 widget 实例化后再改其 session_state）
+    if st.session_state.get("nav_radio") != cur_label:
         st.session_state["nav_radio"] = cur_label
 
     def _nav_change():
@@ -680,7 +678,6 @@ def _finalize_completed(project_id, project_dir, topic, state):
         "project_id": project_id,
         "topic": topic,
     }
-    st.session_state["nav_radio"] = PAGE_LABELS.get("report", "报告预览")
     st.session_state["page"] = "report"
     st.rerun()
 
