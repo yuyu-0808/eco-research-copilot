@@ -13,6 +13,7 @@ import streamlit as st
 from src.utils.config import Config
 from src.utils.checkpoint import Checkpoint, PauseRequested
 from src.utils.source_grade import source_grade
+from src.utils.evidence import EvidenceRecord, records_to_text
 from src.orchestrator import ResearchOrchestrator
 from src.ui.helpers import (
     PROJECTS_DIR,
@@ -579,17 +580,17 @@ def _start_worker(project_id, project_dir, topic, resume=False):
 def _edit_intermediates(project_id, project_dir, state, ckpt):
     """暂停后展示并编辑中间产物（Step2：可编辑，保存后触发下游重跑）。"""
     stages = state.get("stages", {})
-    plan_data = (stages.get("plan") or {}).get("data") or {}
-    collect_data = (stages.get("collect") or {}).get("data") or {}
-    analyze_data = (stages.get("analyze") or {}).get("data") or {}
+    plan_data = (stages.get("architect") or {}).get("data") or {}
+    collect_data = (stages.get("verify") or {}).get("data") or {}
+    analyze_data = (stages.get("structure") or {}).get("data") or {}
 
     st.markdown('<div class="sec-title" style="margin-top:.4rem;">中间产物预览与编辑</div>', unsafe_allow_html=True)
-    t1, t2, t3 = st.tabs(["① 调研提纲", "② 已校验情报（可编辑）", "③ 分析结果"])
+    t1, t2, t3 = st.tabs(["① 调研框架", "② 已校验情报（可编辑）", "③ 结构化提炼"])
     with t1:
         if plan_data:
             st.json(plan_data)
         else:
-            st.caption("规划阶段尚未完成。")
+            st.caption("架构阶段尚未完成。")
     with t2:
         if collect_data:
             vc = collect_data.get("verified_context", "")
@@ -598,17 +599,17 @@ def _edit_intermediates(project_id, project_dir, state, ckpt):
             if vc_key not in st.session_state:
                 st.session_state[vc_key] = vc
             st.text_area(
-                "已校验情报（可直接修改，保存后将从分析阶段重新执行）",
+                "已校验情报（可直接修改，保存后将从结构化提炼阶段重新执行）",
                 key=vc_key,
                 height=240,
             )
             if st.button("💾 保存修改", key="btn_save_vc"):
                 state = ckpt.load()
-                if state.get("stages", {}).get("collect"):
-                    state["stages"]["collect"]["data"]["verified_context"] = st.session_state[vc_key]
+                if state.get("stages", {}).get("verify"):
+                    state["stages"]["verify"]["data"]["verified_context"] = st.session_state[vc_key]
                     ckpt.save(state)
-                ckpt.reset_from("analyze")  # 情报被人工修改，分析+排版需重跑
-                st.toast("已保存，点击「继续调研」将从分析阶段重新执行")
+                ckpt.reset_from("structure")  # 情报被人工修改，提炼+撰写+渲染需重跑
+                st.toast("已保存，点击「继续调研」将从结构化提炼阶段重新执行")
                 st.rerun()
         else:
             st.caption("检索稽核阶段尚未完成。")
@@ -616,7 +617,89 @@ def _edit_intermediates(project_id, project_dir, state, ckpt):
         if analyze_data:
             st.json(analyze_data)
         else:
-            st.caption("分析阶段尚未完成（或已因修改情报而待重跑）。")
+            st.caption("结构化提炼阶段尚未完成（或已因修改情报而待重跑）。")
+
+
+def _render_review_panel(project_id, project_dir, topic, ckpt, state):
+    """三阶段人机协同确认面板：框架确认 / 素材审核 / 终稿润色。"""
+    review_stage = state.get("review_stage", "")
+    stages = state.get("stages", {})
+
+    labels = {
+        "framework": "① 框架确认 · 课题架构师产出",
+        "materials": "② 素材审核 · 信源研究员产出",
+        "draft": "③ 终稿润色 · 内容撰写师产出",
+    }
+    st.markdown(
+        f'<div class="sec-title" style="margin-top:.4rem;">{labels.get(review_stage, "人工确认")}</div>',
+        unsafe_allow_html=True,
+    )
+
+    if review_stage == "framework":
+        plan_data = (stages.get("architect") or {}).get("data") or {}
+        outline = plan_data.get("outline", [])
+        fw_name = plan_data.get("framework_name", "")
+        st.markdown(f"已匹配行研框架：**{html_escape(fw_name)}**，共 {len(outline)} 个标准章节")
+        outline_key = f"review_outline_{project_id}"
+        if outline_key not in st.session_state:
+            st.session_state[outline_key] = "\n".join(outline)
+        st.text_area("研究框架（每行一个章节，可增删调整）", key=outline_key, height=200)
+        if st.button("✅ 确认框架，进入检索", key="btn_review_framework", type="primary"):
+            new_outline = [l.strip() for l in st.session_state[outline_key].splitlines() if l.strip()]
+            state = ckpt.load()
+            if new_outline and state.get("stages", {}).get("architect"):
+                state["stages"]["architect"]["data"]["outline"] = new_outline
+                ckpt.save(state)
+            ckpt.clear_review()
+            _start_worker(project_id, project_dir, topic, resume=True)
+            st.rerun()
+
+    elif review_stage == "materials":
+        verify_data = (stages.get("verify") or {}).get("data") or {}
+        ev_list = verify_data.get("evidence", [])
+        conflicts = verify_data.get("conflicts", [])
+        conflict_claims = {c.get("claim", "") for c in conflicts}
+        st.markdown(f"已检索并稽核 **{len(ev_list)} 条有效证据**，可按章节审核、剔除无效信源")
+        keep_flags = []
+        for i, ev in enumerate(ev_list):
+            tier = ev.get("source_tier", "B")
+            claim = (ev.get("claim") or ev.get("excerpt") or "").strip()
+            section = ev.get("section") or ""
+            publisher = ev.get("publisher") or ""
+            is_conflict = bool(claim) and claim in conflict_claims
+            flag = " ⚠ 数据矛盾" if is_conflict else ""
+            keep = st.checkbox(
+                f"{i+1}. [{tier}] {claim[:50]}{flag} — {publisher} · {section}",
+                value=True, key=f"review_keep_{project_id}_{i}",
+            )
+            keep_flags.append(keep)
+        if st.button("✅ 确认素材，进入撰写", key="btn_review_materials", type="primary"):
+            kept = [ev_list[i] for i in range(len(ev_list)) if keep_flags[i]]
+            state = ckpt.load()
+            if state.get("stages", {}).get("verify"):
+                rebuilt = [EvidenceRecord.from_dict(e) for e in kept]
+                state["stages"]["verify"]["data"]["evidence"] = kept
+                state["stages"]["verify"]["data"]["verified_context"] = records_to_text(rebuilt)
+                ckpt.save(state)
+            ckpt.clear_review()
+            _start_worker(project_id, project_dir, topic, resume=True)
+            st.rerun()
+
+    elif review_stage == "draft":
+        write_data = (stages.get("write") or {}).get("data") or {}
+        md = write_data.get("markdown_report", "")
+        draft_key = f"review_draft_{project_id}"
+        if draft_key not in st.session_state:
+            st.session_state[draft_key] = md
+        st.text_area("报告初稿（可直接编辑，确认后进入渲染排版）", key=draft_key, height=320)
+        if st.button("✅ 确认终稿，进入渲染", key="btn_review_draft", type="primary"):
+            state = ckpt.load()
+            if state.get("stages", {}).get("write"):
+                state["stages"]["write"]["data"]["markdown_report"] = st.session_state[draft_key]
+                ckpt.save(state)
+            ckpt.clear_review()
+            _start_worker(project_id, project_dir, topic, resume=True)
+            st.rerun()
 
 
 def _render_running_fragment(project_id, project_dir, topic, ckpt):
@@ -645,7 +728,7 @@ def _render_running_fragment(project_id, project_dir, topic, ckpt):
 
 
 def _render_paused_panel(project_id, project_dir, topic, ckpt, state):
-    """暂停中：展示进度 + 编辑中间产物 + 继续按钮（普通 widget，非 fragment）。"""
+    """暂停中：展示进度 + 中间产物/确认点 + 继续按钮（普通 widget，非 fragment）。"""
     entries = read_log(project_dir)
     st.markdown('<div class="sec-title">多智能体流水线</div>', unsafe_allow_html=True)
     st.markdown(
@@ -656,27 +739,50 @@ def _render_paused_panel(project_id, project_dir, topic, ckpt, state):
         pipeline_html(derive_stages(entries), current_round(entries), entries[-10:]),
         unsafe_allow_html=True,
     )
-    st.info("⏸️ 调研已暂停，进度已保存。可编辑中间产物后继续。")
-    _edit_intermediates(project_id, project_dir, state, ckpt)
-    if st.button("▶️ 继续调研", key="btn_resume_run", type="primary"):
-        ckpt.clear_pause()
-        _start_worker(project_id, project_dir, topic, resume=True)
-        st.toast("已继续，从断点恢复执行")
-        st.rerun()
+
+    review_stage = state.get("review_stage", "")
+    if review_stage:
+        # 人工确认模式：展示对应确认 UI（框架确认 / 素材审核 / 终稿润色）
+        _render_review_panel(project_id, project_dir, topic, ckpt, state)
+    else:
+        # 通用暂停：编辑中间产物 + 继续
+        st.info("⏸️ 调研已暂停，进度已保存。可编辑中间产物后继续。")
+        _edit_intermediates(project_id, project_dir, state, ckpt)
+        if st.button("▶️ 继续调研", key="btn_resume_run", type="primary"):
+            ckpt.clear_pause()
+            _start_worker(project_id, project_dir, topic, resume=True)
+            st.toast("已继续，从断点恢复执行")
+            st.rerun()
 
 
 def _finalize_completed(project_id, project_dir, topic, state):
     """收尾：落盘结果 + 跳转报告页。"""
-    plan_data = (state.get("stages", {}).get("plan") or {}).get("data") or {}
-    ai_data = (state.get("stages", {}).get("analyze") or {}).get("data") or {}
-    docx_path = ((state.get("stages", {}).get("format") or {}).get("data") or {}).get("docx_path", "")
-    final_result = {"plan_data": plan_data, "ai_data": ai_data, "docx_path": docx_path}
+    stages = state.get("stages", {})
+    plan_data = (stages.get("architect") or {}).get("data") or {}
+    structure = (stages.get("structure") or {}).get("data") or {}
+    write_data = (stages.get("write") or {}).get("data") or {}
+    verify_data = (stages.get("verify") or {}).get("data") or {}
+    docx_path = ((stages.get("render") or {}).get("data") or {}).get("docx_path", "")
+    ai_data = {
+        "report_title": structure.get("report_title", ""),
+        "publish_date": structure.get("publish_date", ""),
+        "core_insights": structure.get("core_insights", ""),
+        "markdown_report": write_data.get("markdown_report", ""),
+        "charts": structure.get("charts", []),
+        "tables": structure.get("tables", []),
+        "references": structure.get("references", []),
+    }
+    evidence = verify_data.get("evidence", [])
+    conflicts = verify_data.get("conflicts", [])
+    final_result = {"plan_data": plan_data, "ai_data": ai_data, "docx_path": docx_path, "evidence": evidence, "conflicts": conflicts}
     save_result(project_dir, project_id, topic, final_result)
     st.session_state["active_run"] = None
     st.session_state["report_data"] = {
         "plan_data": plan_data,
         "ai_data": ai_data,
         "docx_path": docx_path,
+        "evidence": evidence,
+        "conflicts": conflicts,
         "project_id": project_id,
         "topic": topic,
     }
@@ -866,6 +972,54 @@ def render_report():
             spec = chart_to_spec(c)
             if spec:
                 st.vega_lite_chart(spec, width="stretch")
+
+    # 证据溯源面板（每条结论回溯到原始信源）
+    evidence = data.get("evidence", []) or []
+    conflicts = data.get("conflicts", []) or []
+    if evidence:
+        st.markdown('<div class="sec-title">证据溯源 · Evidence Trail</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<p style="color:var(--muted);margin:0 0 .8rem;">每条结论绑定信源等级 / 机构 / 原文摘录 / 链接，可逐条核查。</p>',
+            unsafe_allow_html=True,
+        )
+        conflict_claims = {c.get("claim", "") for c in conflicts}
+        for i, ev in enumerate(evidence, 1):
+            tier = ev.get("source_tier", "B")
+            tier_label = {"S": "官方信源", "A": "权威信源", "B": "一般信源", "D": "低质信源"}.get(tier, "未知")
+            grade_cls = {"S": "badge-grade-s", "A": "badge-grade-a", "B": "badge-grade-b", "D": "badge-grade-b"}.get(tier, "badge-grade-b")
+            claim = (ev.get("claim") or ev.get("excerpt") or "").strip()
+            value = ev.get("value") or ""
+            unit = ev.get("unit") or ""
+            period = ev.get("period") or ""
+            publisher = ev.get("publisher") or "未知机构"
+            section = ev.get("section") or ""
+            url = ev.get("source_url") or ""
+            title = ev.get("source_title") or ""
+            excerpt = ev.get("excerpt") or ""
+
+            is_conflict = bool(claim) and claim in conflict_claims
+            conflict_flag = ' <span style="color:#d4537e;">⚠ 数据矛盾，请人工核实</span>' if is_conflict else ""
+
+            meta_parts = [html_escape(publisher)]
+            if value:
+                meta_parts.append(f"{html_escape(str(value))}{html_escape(unit)}")
+            if period:
+                meta_parts.append(html_escape(period))
+            if section:
+                meta_parts.append(html_escape(section))
+            meta = " · ".join(meta_parts)
+
+            head = (
+                f'<b>{i}.</b> {html_escape(claim)} '
+                f'<span class="badge {grade_cls}">{tier} · {tier_label}</span>{conflict_flag}'
+            )
+            if url:
+                head += f' <a href="{html_escape(url)}" target="_blank" style="font-size:.85rem;">↗ 原文</a>'
+            st.markdown(head, unsafe_allow_html=True)
+            st.caption(meta)
+            if excerpt and excerpt != claim:
+                with st.expander(f"原文摘录 · {html_escape(title[:30]) if title else str(i)}"):
+                    st.caption(html_escape(excerpt))
 
     # 参考文献
     refs = ai_data.get("references", []) or []
