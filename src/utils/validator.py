@@ -10,6 +10,7 @@
 
 from .evidence import EvidenceRecord, TIER_LABEL
 from .source_grade import source_grade
+from .normalizer import normalize_value
 
 _TIER_RANK = {"S": 4, "A": 3, "B": 2, "D": 1, "": 0}
 
@@ -87,12 +88,20 @@ def _detect_conflicts(evidence: list) -> list:
 
     conflicts = []
     for (section, claim), items in groups.items():
-        values = {e.value for e in items}
-        if len(values) > 1:
+        # 归一化后比对：语义相等（如"30%"vs"0.3"、"3万辆"vs"30000辆"）不算矛盾
+        normalized = {}
+        for e in items:
+            nv = normalize_value(e.value)
+            if nv is not None:
+                normalized.setdefault(nv.key(), e.value)
+        if len(normalized) > 1:
             conflicts.append({
                 "section": section,
                 "claim": claim,
-                "values": sorted(values),
+                "values": sorted({e.value for e in items}),
+                "normalized": sorted(
+                    f"{k[0]}{(' ' + k[1]) if k[1] else ''}" for k in normalized.keys()
+                ),
                 "sources": [
                     {"title": e.source_title, "url": e.source_url, "tier": e.source_tier}
                     for e in items
