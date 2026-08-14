@@ -7,7 +7,7 @@ from src.utils.llm_utils import call_llm
 from src.tools.docx_writer import DocxWriter
 
 
-class FormatterAgent:
+class RendererAgent:
     def __init__(self, logger: AgentLogger):
         self.logger = logger
         self.client = OpenAI(api_key=Config.DEEPSEEK_API_KEY, base_url=Config.BASE_URL)
@@ -19,7 +19,7 @@ class FormatterAgent:
             return markdown_report
         placeholders = re.findall(r'\[\[(?:CHART|TABLE):\d+\]\]', markdown_report)
         prompt = f"""
-        你是一位资深文字编辑。请对下面这篇研究报告正文进行润色：
+        你是一位【交付渲染官】。请对下面这篇研究报告正文进行润色：
 
         1. 语言更专业、流畅、书面化，用词准确。
         2. 可适当补充分析性表述，让论证更充分（但不要引入新的事实或编造数据）。
@@ -31,37 +31,37 @@ class FormatterAgent:
         {markdown_report}
         """
         polished = call_llm(
-            self.client, self.model, self.logger, "Agent5_Formatter",
+            self.client, self.model, self.logger, "交付渲染官",
             prompt, need_json=False, temperature=0.5
         )
         # 保护：润色后若丢失图表占位符，回退原文，避免图表穿插失效
         polished_placeholders = re.findall(r'\[\[(?:CHART|TABLE):\d+\]\]', polished or "")
         if placeholders and set(polished_placeholders) != set(placeholders):
-            self.logger.log_event("Agent5_Formatter", "WARNING", "润色丢失图表占位符，回退原文")
+            self.logger.log_event("交付渲染官", "WARNING", "润色丢失图表占位符，回退原文")
             return markdown_report
         return polished
 
     def format_delivery(self, project_name: str, ai_data: dict) -> str:
         """文字润色 + 排版，输出最终 Word 文档；排版失败时降级输出 Markdown 并标记风险。"""
-        self.logger.log_event("Agent5_Formatter", "START", "开始文字润色与排版...")
+        self.logger.log_event("交付渲染官", "START", "开始内容渲染与多格式排版...")
 
         try:
             # 1. 文字润色
             ai_data["markdown_report"] = self._polish(ai_data.get("markdown_report", ""))
-            self.logger.log_event("Agent5_Formatter", "SUCCESS", "文字润色完成")
+            self.logger.log_event("交付渲染官", "SUCCESS", "文字润色完成")
 
             # 2. 排版
             writer = DocxWriter(project_name=project_name)
             docx_path = writer.generate_report(ai_data)
 
-            self.logger.log_event("Agent5_Formatter", "SUCCESS", f"研报生成完毕！文件保存在: {docx_path}")
+            self.logger.log_event("交付渲染官", "SUCCESS", f"研报生成完毕！文件保存在: {docx_path}")
             return docx_path
 
         except Exception as e:
             # 排版降级：Word 生成失败时，退回输出 Markdown 文件，不阻断流水线
-            self.logger.log_event("Agent5_Formatter", "WARNING", f"Word 排版失败，降级输出 Markdown: {e}")
+            self.logger.log_event("交付渲染官", "WARNING", f"Word 排版失败，降级输出 Markdown: {e}")
             md_path = self._save_markdown(project_name, ai_data)
-            self.logger.log_event("Agent5_Formatter", "WARNING", f"已降级输出 Markdown（风险标记）: {md_path}")
+            self.logger.log_event("交付渲染官", "WARNING", f"已降级输出 Markdown（风险标记）: {md_path}")
             return md_path
 
     def _save_markdown(self, project_name: str, ai_data: dict) -> str:

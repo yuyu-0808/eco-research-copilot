@@ -14,13 +14,13 @@ PROJECTS_DIR = os.path.join(ROOT_DIR, "projects")
 
 # 智能体 -> 流水线阶段索引（用于前端可视化）
 STAGE_MAP = {
-    "Agent1_Planner": 0,
-    "Agent2_Scraper": 1,
-    "Agent3_Verifier": 2,
-    "Agent4_Analyst": 3,
-    "Agent5_Formatter": 4,
+    "课题架构师": 0,
+    "信源研究员": 1,
+    "事实稽核官": 2,
+    "内容撰写师": 3,
+    "交付渲染官": 4,
 }
-STAGE_NAMES = ["规划", "采集", "质检", "分析", "排版"]
+STAGE_NAMES = ["架构", "检索", "稽核", "撰写", "渲染"]
 
 
 def html_escape(s):

@@ -353,7 +353,7 @@ def kpi_html(m):
         ("完成报告", m["completed"], "份", ""),
         ("生成图表", m["charts"], "张", ""),
         ("生成表格", m["tables"], "张", ""),
-        ("质检通过率", m["qa_rate"], "%", f"共 {m['qa_total']} 次质检"),
+        ("稽核通过率", m["qa_rate"], "%", f"共 {m['qa_total']} 次稽核"),
         ("平均耗时", avg, "", "单项目"),
     ]
     cells = []
@@ -369,11 +369,11 @@ def kpi_html(m):
 
 def pipeline_html(states, rnd, logs):
     stages = [
-        ("01", "规划", "Planner · 拆解课题"),
-        ("02", "采集", "Scraper · 多源检索"),
-        ("03", "质检", "Verifier · 防幻觉"),
-        ("04", "分析", "Analyst · 建模撰文"),
-        ("05", "排版", "Formatter · 交付"),
+        ("01", "架构", "课题架构师 · 拆解课题"),
+        ("02", "检索", "信源研究员 · 多源检索"),
+        ("03", "稽核", "事实稽核官 · 防幻觉"),
+        ("04", "撰写", "内容撰写师 · 建模撰文"),
+        ("05", "渲染", "交付渲染官 · 交付"),
     ]
     icon = {"pending": "", "active": "", "done": "✓", "error": "!"}
     cells = []
@@ -389,7 +389,7 @@ def pipeline_html(states, rnd, logs):
     if rnd:
         rnd_html = (
             f'<div style="font-size:13px;color:var(--muted);margin:.4rem 0 .5rem;">'
-            f'🔄 质检循环 · 第 {rnd.group(1)} / {rnd.group(2)} 轮</div>'
+            f'🔄 稽核循环 · 第 {rnd.group(1)} / {rnd.group(2)} 轮</div>'
         )
 
     lines = []
@@ -591,7 +591,7 @@ def _edit_intermediates(project_id, project_dir, state, ckpt):
     with t2:
         if collect_data:
             vc = collect_data.get("verified_context", "")
-            st.caption(f"质检轮次：第 {collect_data.get('round', '-')} 轮 / 共 {collect_data.get('max_rounds', '-')} 轮")
+            st.caption(f"稽核轮次：第 {collect_data.get('round', '-')} 轮 / 共 {collect_data.get('max_rounds', '-')} 轮")
             vc_key = f"edit_vc_{project_id}"
             if vc_key not in st.session_state:
                 st.session_state[vc_key] = vc
@@ -609,7 +609,7 @@ def _edit_intermediates(project_id, project_dir, state, ckpt):
                 st.toast("已保存，点击「继续调研」将从分析阶段重新执行")
                 st.rerun()
         else:
-            st.caption("采集质检阶段尚未完成。")
+            st.caption("检索稽核阶段尚未完成。")
     with t3:
         if analyze_data:
             st.json(analyze_data)
@@ -720,7 +720,7 @@ def render_new():
     st.markdown('<div class="sec-title">新建调研</div>', unsafe_allow_html=True)
     st.markdown(
         '<h2 style="margin:0 0 .3rem;font-size:1.5rem;font-weight:800;color:var(--ink);">发起一次多智能体调研</h2>'
-        '<p style="color:var(--muted);margin:0 0 1rem;">输入一个行业 / 市场 / 政策议题，系统将自动拆解、检索、质检并产出报告。</p>',
+        '<p style="color:var(--muted);margin:0 0 1rem;">输入一个行业 / 市场 / 政策议题，系统将自动拆解、检索、稽核并产出报告。</p>',
         unsafe_allow_html=True,
     )
 
@@ -745,8 +745,8 @@ def render_new():
     st.markdown('<div style="font-size:12.5px;color:var(--muted);margin:.2rem 0 .3rem;">或选择一个示例：</div>', unsafe_allow_html=True)
     sel = st.pills("示例课题", examples, selection_mode="single", key="new_example", label_visibility="collapsed")
 
-    # 高级设置：可直接修改模型 / 搜索引擎 / 轮数 / 质检策略
-    with st.expander("⚙️ 高级设置 · 模型 / 搜索引擎 / 质检策略", expanded=False):
+    # 高级设置：可直接修改模型 / 搜索引擎 / 轮数 / 稽核策略
+    with st.expander("⚙️ 高级设置 · 模型 / 搜索引擎 / 稽核策略", expanded=False):
         c1, c2 = st.columns(2)
         with c1:
             Config.MODEL_NAME = st.text_input("模型名称", value=Config.MODEL_NAME)
@@ -756,7 +756,7 @@ def render_new():
                 format_func=lambda s: "Tavily（推荐，需密钥）" if s == "tavily" else "DuckDuckGo（可选代理）",
             )
         with c2:
-            Config.MAX_COLLECT_ROUNDS = st.slider("采集轮数上限", 1, 5, int(Config.MAX_COLLECT_ROUNDS))
+            Config.MAX_COLLECT_ROUNDS = st.slider("检索轮数上限", 1, 5, int(Config.MAX_COLLECT_ROUNDS))
             Config.REQUIRE_STRICT_EVIDENCE = st.toggle("强制防幻觉验证（质量门禁）", value=bool(Config.REQUIRE_STRICT_EVIDENCE))
         Config.REPORT_MODE = st.radio(
             "报告正文模式",
@@ -838,7 +838,7 @@ def render_report():
     # 质量门禁清单
     requirements = plan_data.get("research_requirements", [])
     if requirements:
-        with st.expander("🧭 调研需求清单 · 质量门禁（Agent 1 产出）"):
+        with st.expander("🧭 调研需求清单 · 质量门禁（课题架构师产出）"):
             for i, r in enumerate(requirements, 1):
                 st.markdown(f"**{i}. {html_escape(r.get('text', ''))}**" if isinstance(r, dict) else f"**{i}. {html_escape(str(r))}**")
 
@@ -941,7 +941,7 @@ def render_history():
                 status_badge = "ok" if p["status"] == "completed" else "part"
                 status_txt = "已完成" if p["status"] == "completed" else "进行中/中断"
                 qa_badge = "ok" if p["passed_qa"] else "part"
-                qa_txt = "质检通过" if p["passed_qa"] else "质检未达标"
+                qa_txt = "稽核通过" if p["passed_qa"] else "稽核未达标"
                 st.markdown(
                     f'<span class="badge {status_badge}">{status_txt}</span>&nbsp;'
                     f'<span class="badge {qa_badge}">{qa_txt}</span>&nbsp;'
@@ -979,7 +979,7 @@ def render_settings():
     st.markdown('<div class="sec-title">设置</div>', unsafe_allow_html=True)
     st.markdown(
         '<h2 style="margin:0 0 .3rem;font-size:1.5rem;font-weight:800;color:var(--ink);">运行配置</h2>'
-        '<p style="color:var(--muted);margin:0 0 1rem;">调整大模型、搜索引擎与质检策略。保存后写入 .env，重启应用生效。</p>',
+        '<p style="color:var(--muted);margin:0 0 1rem;">调整大模型、搜索引擎与稽核策略。保存后写入 .env，重启应用生效。</p>',
         unsafe_allow_html=True,
     )
 
@@ -995,7 +995,7 @@ def render_settings():
         Config.API_RATE_LIMIT_SECONDS = int(st.number_input("API 调用最小间隔（秒）", min_value=0, value=int(Config.API_RATE_LIMIT_SECONDS)))
     with c2:
         Config.MAX_RETRY_WAIT_SECONDS = int(st.number_input("最大重试等待（秒）", min_value=0, value=int(Config.MAX_RETRY_WAIT_SECONDS)))
-    Config.MAX_COLLECT_ROUNDS = st.slider("采集轮数上限", 1, 5, int(Config.MAX_COLLECT_ROUNDS))
+    Config.MAX_COLLECT_ROUNDS = st.slider("检索轮数上限", 1, 5, int(Config.MAX_COLLECT_ROUNDS))
     Config.REQUIRE_STRICT_EVIDENCE = st.toggle("强制防幻觉验证（质量门禁）", value=bool(Config.REQUIRE_STRICT_EVIDENCE))
     Config.REPORT_MODE = st.selectbox(
         "报告正文模式", ["standard", "deep"],

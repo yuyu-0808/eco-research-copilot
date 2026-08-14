@@ -4,7 +4,7 @@ from src.utils.logger import AgentLogger
 from src.utils.llm_utils import call_llm
 
 
-class AnalystAgent:
+class WriterAgent:
     def __init__(self, logger: AgentLogger):
         self.logger = logger
         self.client = OpenAI(api_key=Config.DEEPSEEK_API_KEY, base_url=Config.BASE_URL)
@@ -13,7 +13,7 @@ class AnalystAgent:
     def _gen_structure(self, topic: str, safe_context: str) -> dict:
         """第一步：结构化提炼（短 JSON，含标题/洞察/大纲/多图表/多表格/参考文献）"""
         prompt = f"""
-        你是一位资深宏观行业研究分析师。
+        你是一位【内容撰写师】。
         课题：{topic}
         【已核验的数据与信源】：
         {safe_context}
@@ -47,7 +47,7 @@ class AnalystAgent:
             ]
         }}
         """
-        return call_llm(self.client, self.model, self.logger, "Agent4_Analyst", prompt, need_json=True)
+        return call_llm(self.client, self.model, self.logger, "内容撰写师", prompt, need_json=True)
 
     def _gen_body(self, topic: str, outline, safe_context: str, references, charts, tables) -> str:
         """模式一（标准）：一次性生成全文，降字数 + 强完整性约束"""
@@ -56,7 +56,7 @@ class AnalystAgent:
         chart_text = "\n".join(f"图{i}：{c.get('title')}" for i, c in enumerate(charts or [], 1)) or "（无）"
         table_text = "\n".join(f"表{i}：{t.get('title')}" for i, t in enumerate(tables or [], 1)) or "（无）"
         prompt = f"""
-        你是一位资深宏观行业研究分析师。请基于以下研究大纲和已核验的数据，撰写一篇学术风格的深度研究报告正文。
+        你是一位【内容撰写师】。请基于以下研究大纲和已核验的数据，撰写一篇学术风格的深度研究报告正文。
 
         课题：{topic}
         【章节大纲】：
@@ -82,7 +82,7 @@ class AnalystAgent:
 
         请开始撰写正文：
         """
-        return call_llm(self.client, self.model, self.logger, "Agent4_Analyst", prompt, need_json=False, temperature=0.7)
+        return call_llm(self.client, self.model, self.logger, "内容撰写师", prompt, need_json=False, temperature=0.7)
 
     def _gen_body_deep(self, topic: str, outline, safe_context: str, references, charts, tables) -> str:
         """模式二（深度）：分章生成，每章一次请求，内容更充实、不易截断"""
@@ -92,9 +92,9 @@ class AnalystAgent:
         outline = outline or ["一、引言", "二、正文", "三、结论与建议"]
         sections = []
         for i, sec in enumerate(outline, 1):
-            self.logger.log_event("Agent4_Analyst", "ACTION", f"深度模式：撰写第 {i}/{len(outline)} 章「{sec}」...")
+            self.logger.log_event("内容撰写师", "ACTION", f"深度模式：撰写第 {i}/{len(outline)} 章「{sec}」...")
             prompt = f"""
-            你是一位资深宏观行业研究分析师。请撰写研究报告的【{sec}】这一章节。
+            你是一位【内容撰写师】。请撰写研究报告的【{sec}】这一章节。
 
             课题：{topic}
             【已核验的数据与信源】：
@@ -114,14 +114,14 @@ class AnalystAgent:
 
             请撰写【{sec}】这一章：
             """
-            section = call_llm(self.client, self.model, self.logger, "Agent4_Analyst", prompt, need_json=False, temperature=0.7)
+            section = call_llm(self.client, self.model, self.logger, "内容撰写师", prompt, need_json=False, temperature=0.7)
             sections.append(section.strip())
         return "\n\n".join(sections)
 
     def analyze(self, plan_data: dict, verified_context: str) -> dict:
         topic = plan_data.get("topic")
         mode_label = "深度分章" if Config.REPORT_MODE == "deep" else "标准"
-        self.logger.log_event("Agent4_Analyst", "START", f"开始深度推演（结构化提炼 + 正文撰写[{mode_label}模式]）")
+        self.logger.log_event("内容撰写师", "START", f"开始内容撰写（结构化提炼 + 正文撰写[{mode_label}模式]）")
 
         # 截断超长上下文，防止撑爆 Token 上限
         safe_context = verified_context[:5000] if verified_context else "（无可用底层数据）"
@@ -129,7 +129,7 @@ class AnalystAgent:
         # 第一步：结构化提炼（标题/洞察/大纲/多图表/多表格/参考文献）
         structure = self._gen_structure(topic, safe_context)
         self.logger.log_event(
-            "Agent4_Analyst", "SUCCESS",
+            "内容撰写师", "SUCCESS",
             f"结构化提炼完成：{len(structure.get('charts', []))} 张图、{len(structure.get('tables', []))} 张表"
         )
 
@@ -143,7 +143,7 @@ class AnalystAgent:
                 structure.get("charts", []),
                 structure.get("tables", []),
             )
-            self.logger.log_event("Agent4_Analyst", "SUCCESS", "深度模式正文撰写完成（分章生成）")
+            self.logger.log_event("内容撰写师", "SUCCESS", "深度模式正文撰写完成（分章生成）")
         else:
             markdown_report = self._gen_body(
                 topic,
@@ -153,7 +153,7 @@ class AnalystAgent:
                 structure.get("charts", []),
                 structure.get("tables", []),
             )
-            self.logger.log_event("Agent4_Analyst", "SUCCESS", "标准模式正文撰写完成")
+            self.logger.log_event("内容撰写师", "SUCCESS", "标准模式正文撰写完成")
 
         return {
             "report_title": structure.get("report_title", ""),

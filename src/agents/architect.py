@@ -4,7 +4,7 @@ from src.utils.config import Config
 from src.utils.logger import AgentLogger
 from src.utils.llm_utils import call_llm
 
-class PlannerAgent:
+class ArchitectAgent:
     def __init__(self, logger: AgentLogger):
         self.logger = logger
         self.client = OpenAI(api_key=Config.DEEPSEEK_API_KEY, base_url=Config.BASE_URL)
@@ -14,10 +14,10 @@ class PlannerAgent:
         """
         接收用户需求，输出调研提纲和确定性的质量门禁清单。
         """
-        self.logger.log_event("Agent1_Planner", "START", f"开始规划课题: {user_topic}")
+        self.logger.log_event("课题架构师", "START", f"开始拆解课题框架: {user_topic}")
         
         prompt = f"""
-        你是一个全球顶级的宏观商业分析总监。
+        你是一位资深的【课题架构师】，擅长把宏观行业研究课题拆解为清晰的调研框架与可执行的质量门禁清单。
         用户提出的调研课题是："{user_topic}"
 
         请你对这个课题进行专业拆解，并输出一份必须严格执行的【研究需求清单 (Requirements Gate)】。
@@ -37,17 +37,17 @@ class PlannerAgent:
 
         try:
             plan_data = call_llm(
-                self.client, self.model, self.logger, "Agent1_Planner", prompt, need_json=True
+                self.client, self.model, self.logger, "课题架构师", prompt, need_json=True
             )
             
             # 记录成功日志
             self.logger.log_event(
-                "Agent1_Planner", 
+                "课题架构师", 
                 "SUCCESS", 
                 f"成功生成提纲与门禁清单，包含 {len(plan_data.get('research_requirements', []))} 个必答问题"
             )
             return plan_data
             
         except Exception as e:
-            self.logger.log_event("Agent1_Planner", "FAILED", f"规划阶段发生异常: {e}")
+            self.logger.log_event("课题架构师", "FAILED", f"课题拆解阶段发生异常: {e}")
             raise e
