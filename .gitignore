@@ -32,8 +32,8 @@ Thumbs.db
 ~$*.docx
 ~$*.pptx
 
-# === 第三方 PPT 模板（体积大，不提交） ===
-/templates/ppt - 副本/
+# === 模板素材（本地死素材，不提交） ===
+/templates/
 
 # === 早期草稿脚本 ===
 test_brain.py
