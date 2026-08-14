@@ -37,6 +37,7 @@ class ResearchOrchestrator:
         if not self.resume:
             state["stages"] = {s: {"status": "pending", "data": None} for s in self.ckpt.STAGES}
             state["current_stage"] = "architect"
+            state["review_stage"] = ""
         self.ckpt.save(state)
 
         try:

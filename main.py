@@ -562,7 +562,18 @@ def render_overview():
                     if p["has_result"]:
                         if st.button("查看", key=f"ov_view_{p['id']}", width="stretch"):
                             r = load_result(p["dir"])
-                            set_report({"plan_data": r.get("plan_data", {}), "ai_data": r.get("ai_data", {}), "docx_path": r.get("docx_path", ""), "project_id": p["id"], "topic": p["topic"]})
+                            set_report({
+                                "plan_data": r.get("plan_data", {}),
+                                "ai_data": r.get("ai_data", {}),
+                                "docx_path": r.get("docx_path", ""),
+                                "evidence": r.get("evidence", []),
+                                "conflicts": r.get("conflicts", []),
+                                "reasons": r.get("reasons", []),
+                                "coverage": r.get("coverage", {}),
+                                "trace": r.get("trace", {}),
+                                "project_id": p["id"],
+                                "topic": p["topic"],
+                            })
 
     # 对比区（页底）
     st.markdown(compare_html(), unsafe_allow_html=True)
@@ -1169,6 +1180,11 @@ def render_history():
                                 "plan_data": r.get("plan_data", {}),
                                 "ai_data": r.get("ai_data", {}),
                                 "docx_path": r.get("docx_path", ""),
+                                "evidence": r.get("evidence", []),
+                                "conflicts": r.get("conflicts", []),
+                                "reasons": r.get("reasons", []),
+                                "coverage": r.get("coverage", {}),
+                                "trace": r.get("trace", {}),
                                 "project_id": p["id"],
                                 "topic": p["topic"],
                             })
