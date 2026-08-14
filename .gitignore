@@ -1,0 +1,45 @@
+# === 依赖与虚拟环境 ===
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# === 敏感配置（绝不提交） ===
+.env
+.env.local
+.env.*.local
+
+# === 运行时产物（运行后自动生成） ===
+projects/
+
+# === IDE / 编辑器 ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === WorkBuddy 本地工作目录 ===
+.workbuddy/
+
+# === 系统 / 临时文件 ===
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+~$*.docx
+~$*.pptx
+
+# === 第三方 PPT 模板（体积大，不提交） ===
+/templates/ppt - 副本/
+
+# === 早期草稿脚本 ===
+test_brain.py
+
+# === 未实现的技能占位（空文件） ===
+skills/
+
+# === 竞品参考资料 ===
+竞品项目/

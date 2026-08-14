@@ -1,0 +1,22 @@
+# Eco-Research Copilot 依赖清单
+# 安装方式：pip install -r requirements.txt
+
+# Web 应用框架
+streamlit
+
+# 环境变量加载
+python-dotenv
+
+# 大模型调用
+openai
+
+# 搜索工具（可切换 tavily / duckduckgo）
+tavily-python
+duckduckgo-search
+
+# 文档生成
+python-docx
+requests
+
+# 测试用（PPT 相关单测）
+python-pptx
