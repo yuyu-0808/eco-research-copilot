@@ -35,6 +35,7 @@ class Checkpoint:
             "status": "running",   # running | paused | completed | failed
             "pause_requested": False,
             "current_stage": "plan",
+            "review_stage": "",    # 人工确认检查点："" | framework | materials | draft
             "stages": {s: {"status": "pending", "data": None} for s in self.STAGES},
         }
 
@@ -53,6 +54,7 @@ class Checkpoint:
         state.setdefault("status", "running")
         state.setdefault("pause_requested", False)
         state.setdefault("current_stage", "plan")
+        state.setdefault("review_stage", "")
         stages = state.setdefault("stages", {})
         for s in self.STAGES:
             stages.setdefault(s, {"status": "pending", "data": None})
@@ -118,6 +120,23 @@ class Checkpoint:
         state = self.load()
         state["pause_requested"] = False
         state["status"] = "running"
+        self.save(state)
+
+    # ---- 人工确认检查点（三阶段人机协同） ----
+    def set_review(self, stage_name: str) -> None:
+        """在指定确认点停下等待人工确认：记录 review_stage 并置为 paused。"""
+        state = self.load()
+        state["review_stage"] = stage_name
+        state["status"] = "paused"
+        state["pause_requested"] = False
+        self.save(state)
+
+    def clear_review(self) -> None:
+        """人工确认通过：清除 review_stage，恢复 running。"""
+        state = self.load()
+        state["review_stage"] = ""
+        state["status"] = "running"
+        state["pause_requested"] = False
         self.save(state)
 
     def pause_requested(self) -> bool:

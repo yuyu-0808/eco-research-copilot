@@ -3,6 +3,8 @@ from openai import OpenAI
 from src.utils.config import Config
 from src.utils.logger import AgentLogger
 from src.utils.llm_utils import call_llm
+from src.utils.frameworks import match_framework, build_plan
+
 
 class ArchitectAgent:
     def __init__(self, logger: AgentLogger):
@@ -12,42 +14,79 @@ class ArchitectAgent:
 
     def generate_plan(self, user_topic: str) -> dict:
         """
-        接收用户需求，输出调研提纲和确定性的质量门禁清单。
+        内核替换：不再让 LLM 自由拆题，而是「内置行研框架兜底 + LLM 仅微调」。
+
+        保证：
+        - 输出结构 100% 符合行研规范（框架兜底，不赌模型发挥）；
+        - LLM 完全失败时，仍能返回标准研究计划。
         """
-        self.logger.log_event("课题架构师", "START", f"开始拆解课题框架: {user_topic}")
-        
-        prompt = f"""
-        你是一位资深的【课题架构师】，擅长把宏观行业研究课题拆解为清晰的调研框架与可执行的质量门禁清单。
-        用户提出的调研课题是："{user_topic}"
+        self.logger.log_event("课题架构师", "START", f"开始按行研框架拆解课题: {user_topic}")
 
-        请你对这个课题进行专业拆解，并输出一份必须严格执行的【研究需求清单 (Requirements Gate)】。
-        你必须定义出 2 到 3 个极其核心的 "question_id" 和 "text"（必答问题）。
-        如果后续智能体搜集不到清单中要求的数据，整个调研将被阻断。
+        # 1. 匹配内置框架，生成标准研究计划（纯确定性，不依赖 LLM）
+        framework = match_framework(user_topic)
+        plan_data = build_plan(user_topic, framework)
+        self.logger.log_event(
+            "课题架构师", "INFO",
+            f"已匹配行研框架：{framework.get('name', '通用')}，共 {len(plan_data['outline'])} 个标准章节"
+        )
 
-        请严格返回如下 JSON 格式，绝不要输出额外的代码块标记或解释文本：
-        {{
-          "topic": "{user_topic}",
-          "outline": ["1. 行业现状与痛点", "2. 核心市场数据", "3. 政策与趋势推演"],
-          "research_requirements": [
-            {{"question_id": "q1", "text": "提取目标市场最近两年的具体销量、市场规模或渗透率的准确数值", "required": true}},
-            {{"question_id": "q2", "text": "明确具体的行业政策、补贴细则或关键驱动因素", "required": true}}
-          ]
-        }}
-        """
-
+        # 2. 可选：LLM 在框架内微调（补充行业特有维度、精准化必答问题表述）
+        #    结构不动，只在现有章节/问题上做语义增强；失败则用框架兜底。
         try:
-            plan_data = call_llm(
+            plan_data = self._refine_by_llm(plan_data, user_topic)
+        except Exception as e:
+            self.logger.log_event("课题架构师", "WARNING", f"LLM 微调失败，使用内置框架兜底: {e}")
+
+        self.logger.log_event(
+            "课题架构师", "SUCCESS",
+            f"研究框架就绪：{len(plan_data.get('research_requirements', []))} 个必答问题，"
+            f"框架 {plan_data.get('framework_name', '')}"
+        )
+        return plan_data
+
+    def _refine_by_llm(self, plan_data: dict, user_topic: str) -> dict:
+        """让 LLM 在【固定章节结构不变】的前提下，微调必答问题的表述与核心指标。
+
+        只允许改写 research_requirements 里每条的 text/metrics，
+        严禁改动 outline、question_id、min_evidence、min_tier、section。
+        """
+        requirements = plan_data.get("research_requirements", [])
+        outline = plan_data.get("outline", [])
+        prompt = f"""
+        你是资深【课题架构师】。已有一个标准行研框架，请在【不改变章节结构】的前提下，
+        针对课题 "{user_topic}" 微调每个必答问题的表述，使其更贴合该行业的具体数据维度。
+
+        【固定大纲（严禁改动章节标题与顺序）】：
+        {json.dumps(outline, ensure_ascii=False)}
+
+        【当前必答问题（含约束字段）】：
+        {json.dumps(requirements, ensure_ascii=False)}
+
+        要求：
+        1. 只输出与输入条数相同的 research_requirements 数组，逐条对应；
+        2. 每条保留 question_id / required / min_evidence / min_tier / section 原值不变；
+        3. 只可微调 text（必答问题表述，更具体化）和 metrics（核心指标，可替换为行业真实指标名）；
+        4. 严禁新增、删除或调整章节；严禁改变 question_id 与 section 的对应关系。
+
+        严格输出 JSON：{{"research_requirements": [...]}}
+        """
+        try:
+            result = call_llm(
                 self.client, self.model, self.logger, "课题架构师", prompt, need_json=True
             )
-            
-            # 记录成功日志
-            self.logger.log_event(
-                "课题架构师", 
-                "SUCCESS", 
-                f"成功生成提纲与门禁清单，包含 {len(plan_data.get('research_requirements', []))} 个必答问题"
-            )
+            refined = result.get("research_requirements", [])
+            if not refined or len(refined) != len(requirements):
+                self.logger.log_event("课题架构师", "WARNING", "LLM 微调条数不匹配，回退框架原值")
+                return plan_data
+            # 强制保护：question_id / section / 约束字段以框架为准，只采纳 text/metrics 微调
+            for i, item in enumerate(refined):
+                if i >= len(requirements):
+                    break
+                base = requirements[i]
+                base["text"] = item.get("text", base["text"])
+                base["metrics"] = item.get("metrics", base["metrics"])
+            plan_data["research_requirements"] = requirements
+            self.logger.log_event("课题架构师", "INFO", "LLM 微调完成（结构不变，问题表述已行业化）")
             return plan_data
-            
-        except Exception as e:
-            self.logger.log_event("课题架构师", "FAILED", f"课题拆解阶段发生异常: {e}")
-            raise e
+        except Exception:
+            raise

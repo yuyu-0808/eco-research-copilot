@@ -124,6 +124,14 @@ def load_checkpoint(project_dir):
     return ck.load()
 
 
+def load_evidence(project_dir):
+    """加载项目保存的证据溯源数据（List[dict]，EvidenceRecord 序列化结果）。"""
+    result = load_result(project_dir)
+    if not result:
+        return []
+    return result.get("evidence", []) or []
+
+
 def save_result(project_dir, project_id, topic, final_result):
     """把一次完整调研结果持久化为 result.json，供历史回看。"""
     os.makedirs(project_dir, exist_ok=True)
@@ -134,6 +142,8 @@ def save_result(project_dir, project_id, topic, final_result):
         "plan_data": final_result.get("plan_data", {}) if isinstance(final_result, dict) else {},
         "ai_data": final_result.get("ai_data", {}) if isinstance(final_result, dict) else {},
         "docx_path": final_result.get("docx_path", "") if isinstance(final_result, dict) else "",
+        "evidence": final_result.get("evidence", []) if isinstance(final_result, dict) else [],
+        "conflicts": final_result.get("conflicts", []) if isinstance(final_result, dict) else [],
     }
     path = os.path.join(project_dir, "result.json")
     with open(path, "w", encoding="utf-8") as f:

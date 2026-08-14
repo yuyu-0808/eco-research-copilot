@@ -73,6 +73,17 @@ class ResearchOrchestrator:
             raise e
 
     # ------------------------------------------------------------------
+    # 人工确认检查点（三阶段人机协同：框架 → 素材 → 终稿）
+    # ------------------------------------------------------------------
+    def _maybe_review(self, stage_name: str) -> None:
+        """人工确认模式下，在指定节点停下等待确认；全自动模式直接跳过。"""
+        if Config.REVIEW_MODE != "manual":
+            return
+        self.ckpt.set_review(stage_name)
+        self.logger.log_event("Orchestrator", "INFO", f"⏸️ 已到达人工确认点「{stage_name}」，等待确认后继续。")
+        raise PauseRequested()
+
+    # ------------------------------------------------------------------
     # 阶段 1：课题架构
     # ------------------------------------------------------------------
     def _stage_architect(self, user_topic: str) -> dict:
@@ -84,6 +95,7 @@ class ResearchOrchestrator:
         self.ckpt.check_pause()
         plan_data = self.architect.generate_plan(user_topic)
         self.ckpt.mark_done("architect", plan_data)
+        self._maybe_review("framework")
         return plan_data
 
     # ------------------------------------------------------------------
@@ -101,17 +113,22 @@ class ResearchOrchestrator:
         verified_context = ""
         feedback = None
         is_pass = False
+        collect_result = {}
+        evidence_list = []
+        conflicts_list = []
 
         while current_round <= max_rounds:
             self.ckpt.check_pause()  # 每轮边界也支持暂停
             self.logger.log_event("Orchestrator", "INFO", f"=== 开启第 {current_round}/{max_rounds} 轮信源稽核循环 ===")
 
-            raw_context = self.researcher.collect_data(plan_data, feedback)
-            verify_result = self.auditor.verify_data(plan_data, raw_context)
+            collect_result = self.researcher.collect_data(plan_data, feedback)
+            verify_result = self.auditor.verify_data(plan_data, collect_result)
             is_pass = verify_result.get("is_pass", False)
 
             if is_pass:
                 verified_context = verify_result.get("verified_context", "")
+                evidence_list = verify_result.get("evidence", [])
+                conflicts_list = verify_result.get("conflicts", [])
                 self.logger.log_event("Orchestrator", "SUCCESS", "✅ 数据质量达标，跳出内循环。")
                 break
             else:
@@ -127,7 +144,8 @@ class ResearchOrchestrator:
 
         # 如果宽容模式开启，或者通过了门禁，继续向下执行
         if not is_pass:
-            verified_context = "（注：证据不充分，但已跳过拦截）" + raw_context
+            fallback_text = collect_result.get("raw_context", "") if isinstance(collect_result, dict) else str(collect_result or "")
+            verified_context = "（注：证据不充分，但已跳过拦截）" + fallback_text
 
         self.ckpt.mark_done("research", {"verified_context": verified_context})
         self.ckpt.mark_done("verify", {
@@ -135,7 +153,10 @@ class ResearchOrchestrator:
             "round": current_round,
             "max_rounds": max_rounds,
             "is_pass": is_pass,
+            "evidence": [e.to_dict() if hasattr(e, "to_dict") else e for e in evidence_list],
+            "conflicts": conflicts_list,
         })
+        self._maybe_review("materials")
         return verified_context
 
     # ------------------------------------------------------------------
@@ -192,6 +213,7 @@ class ResearchOrchestrator:
             self.logger.log_event("Orchestrator", "WARNING", "⚠️ 交叉校验轮次耗尽，采用当前版本正文（逻辑校验为软门禁）。")
 
         self.ckpt.mark_done("write", {"markdown_report": markdown_report, "is_pass": is_pass, "round": current_round})
+        self._maybe_review("draft")
         return markdown_report
 
     # ------------------------------------------------------------------

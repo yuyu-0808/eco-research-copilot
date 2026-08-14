@@ -12,6 +12,12 @@
 _SOURCE_S = [
     "gov", "edu", "oecd", "un.org", "worldbank", "imf.org", "who.int",
     ".ac.cn", "stats", "mofcom", "ndrc", "nea.gov", "miit", "court.gov",
+    # 各国非 gov 命名的政府域名（避免海外课题官方信源被误评 B 级）
+    ".go.th", ".go.jp", ".go.kr", ".go.id", ".gob.mx", ".gouv.fr",
+    ".gob.ar", ".gob.pe", ".gob.cl", ".gob.es", ".bund.de",
+    # 国际组织 / 权威机构（投研常用）
+    "europa.eu", "wto.org", "adb.org", "asean.org", "bis.org",
+    "unesco.org", "ilo.org", "unctad.org", "fao.org", "iea.org",
 ]
 
 # A 级：权威媒体

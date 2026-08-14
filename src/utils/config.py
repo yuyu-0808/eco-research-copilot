@@ -29,6 +29,9 @@ class Config:
     # 报告正文生成模式：standard（一次性生成，快）/ deep（分章生成，更充实）
     REPORT_MODE = os.getenv("REPORT_MODE", "standard")
 
+    # 人机协同模式：auto（全自动，默认）/ manual（三阶段确认：框架→素材→终稿）
+    REVIEW_MODE = os.getenv("REVIEW_MODE", "auto")
+
     @classmethod
     def validate(cls):
         """启动时自检密钥是否完整"""
