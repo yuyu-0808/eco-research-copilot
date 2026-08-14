@@ -144,6 +144,7 @@ def save_result(project_dir, project_id, topic, final_result):
         "docx_path": final_result.get("docx_path", "") if isinstance(final_result, dict) else "",
         "evidence": final_result.get("evidence", []) if isinstance(final_result, dict) else [],
         "conflicts": final_result.get("conflicts", []) if isinstance(final_result, dict) else [],
+        "trace": final_result.get("trace", {}) if isinstance(final_result, dict) else {},
     }
     path = os.path.join(project_dir, "result.json")
     with open(path, "w", encoding="utf-8") as f:

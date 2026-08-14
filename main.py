@@ -774,7 +774,10 @@ def _finalize_completed(project_id, project_dir, topic, state):
     }
     evidence = verify_data.get("evidence", [])
     conflicts = verify_data.get("conflicts", [])
-    final_result = {"plan_data": plan_data, "ai_data": ai_data, "docx_path": docx_path, "evidence": evidence, "conflicts": conflicts}
+    reasons = verify_data.get("reasons", [])
+    coverage = verify_data.get("coverage", {})
+    trace = state.get("trace", {})
+    final_result = {"plan_data": plan_data, "ai_data": ai_data, "docx_path": docx_path, "evidence": evidence, "conflicts": conflicts, "reasons": reasons, "coverage": coverage, "trace": trace}
     save_result(project_dir, project_id, topic, final_result)
     st.session_state["active_run"] = None
     st.session_state["report_data"] = {
@@ -783,6 +786,9 @@ def _finalize_completed(project_id, project_dir, topic, state):
         "docx_path": docx_path,
         "evidence": evidence,
         "conflicts": conflicts,
+        "reasons": reasons,
+        "coverage": coverage,
+        "trace": trace,
         "project_id": project_id,
         "topic": topic,
     }
@@ -898,6 +904,62 @@ def render_new():
         st.rerun()
 
 
+def _render_trace_panel(data):
+    """运行链路面板：每个阶段的耗时、关键产出与判定依据，全链路可追溯。"""
+    trace = data.get("trace", {}) or {}
+    if not trace:
+        return
+    st.markdown('<div class="sec-title">运行链路 · Trace</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p style="color:var(--muted);margin:0 0 .8rem;">每个阶段的耗时、关键产出与判定依据，全链路可追溯。</p>',
+        unsafe_allow_html=True,
+    )
+    coverage = data.get("coverage", {}) or {}
+    reasons = data.get("reasons", []) or []
+    conflicts = data.get("conflicts", []) or []
+
+    stage_order = [
+        ("architect", "① 课题架构 · 框架匹配"),
+        ("research_verify", "② 检索 + 确定性稽核"),
+        ("structure", "③ 结构化提炼"),
+        ("write_audit", "④ 撰写 + 逻辑校验"),
+        ("render", "⑤ 渲染排版"),
+    ]
+    for key, label in stage_order:
+        t = trace.get(key, {})
+        if not t:
+            continue
+        summary = []
+        if key == "architect":
+            summary.append(f"{t.get('outline', 0)} 章节 · {t.get('requirements', 0)} 必答问题")
+        elif key == "research_verify":
+            summary.append(f"{t.get('rounds', '?')} 轮 · {t.get('evidence', 0)} 条证据 · {t.get('conflicts', 0)} 处矛盾")
+            summary.append("✅ 通过" if t.get("is_pass") else "⚠️ 未通过")
+        elif key == "structure":
+            summary.append(f"{t.get('charts', 0)} 图 · {t.get('tables', 0)} 表")
+        elif key == "write_audit":
+            summary.append(f"{t.get('chars', 0)} 字")
+        elif key == "render":
+            summary.append("Word 已生成" if t.get("docx") else "渲染降级")
+
+        header = f"{label} · {t.get('elapsed', '?')}s · " + " · ".join(summary)
+        with st.expander(header):
+            if key == "architect":
+                fw = (data.get("plan_data", {}) or {}).get("framework_name", "")
+                if fw:
+                    st.caption(f"匹配行业框架：{html_escape(fw)}")
+            elif key == "research_verify":
+                if coverage:
+                    cov_txt = " · ".join(f"{k}={v}" for k, v in coverage.items())
+                    st.caption(f"章节证据覆盖（question_id=条数）：{cov_txt}")
+                if reasons:
+                    st.caption("判定理由：" + "；".join(html_escape(r) for r in reasons))
+                if conflicts:
+                    st.caption(f"检测到 {len(conflicts)} 处数值矛盾（详见下方溯源面板标红）")
+            elif key == "write_audit":
+                st.caption("撰写完成后经逻辑稽核交叉校验（论据溯源 + 逻辑矛盾排查）")
+
+
 def render_report():
     data = st.session_state["report_data"]
     ai_data = data.get("ai_data", {}) or {}
@@ -920,6 +982,9 @@ def render_report():
             f'<div class="ab-text">{html_escape(core)}</div></div>',
             unsafe_allow_html=True,
         )
+
+    # 运行链路追踪（每阶段耗时 / 产出 / 判定依据）
+    _render_trace_panel(data)
 
     # 目录
     headings = extract_headings(ai_data.get("markdown_report", ""))

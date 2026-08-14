@@ -40,11 +40,54 @@ class ResearchOrchestrator:
         self.ckpt.save(state)
 
         try:
+            import time
+            trace = {}
+
+            t0 = time.time()
             plan_data = self._stage_architect(user_topic)
+            trace["architect"] = {
+                "elapsed": round(time.time() - t0, 2),
+                "outline": len(plan_data.get("outline", [])),
+                "requirements": len(plan_data.get("research_requirements", [])),
+            }
+
+            t0 = time.time()
             verified_context = self._stage_research_verify(plan_data)
+            vd = self.ckpt.stage_data("verify") or {}
+            trace["research_verify"] = {
+                "elapsed": round(time.time() - t0, 2),
+                "rounds": vd.get("round", 1),
+                "evidence": len(vd.get("evidence", [])),
+                "conflicts": len(vd.get("conflicts", [])),
+                "is_pass": vd.get("is_pass", False),
+            }
+
+            t0 = time.time()
             structure = self._stage_structure(plan_data, verified_context)
+            trace["structure"] = {
+                "elapsed": round(time.time() - t0, 2),
+                "charts": len(structure.get("charts", [])),
+                "tables": len(structure.get("tables", [])),
+            }
+
+            t0 = time.time()
             markdown_report = self._stage_write_audit(plan_data, structure, verified_context)
+            trace["write_audit"] = {
+                "elapsed": round(time.time() - t0, 2),
+                "chars": len(markdown_report or ""),
+            }
+
+            t0 = time.time()
             docx_path = self._stage_render(structure, markdown_report)
+            trace["render"] = {
+                "elapsed": round(time.time() - t0, 2),
+                "docx": bool(docx_path),
+            }
+
+            # 结构化链路追踪落盘
+            state = self.ckpt.load()
+            state["trace"] = trace
+            self.ckpt.save(state)
 
             self.ckpt.set_status("completed")
             self.logger.log_event("Orchestrator", "SUCCESS", "🎉 全链路自动调研圆满完成！")
@@ -116,6 +159,8 @@ class ResearchOrchestrator:
         collect_result = {}
         evidence_list = []
         conflicts_list = []
+        reasons_list = []
+        coverage_map = {}
 
         while current_round <= max_rounds:
             self.ckpt.check_pause()  # 每轮边界也支持暂停
@@ -129,6 +174,8 @@ class ResearchOrchestrator:
                 verified_context = verify_result.get("verified_context", "")
                 evidence_list = verify_result.get("evidence", [])
                 conflicts_list = verify_result.get("conflicts", [])
+                reasons_list = verify_result.get("reasons", [])
+                coverage_map = verify_result.get("coverage", {})
                 self.logger.log_event("Orchestrator", "SUCCESS", "✅ 数据质量达标，跳出内循环。")
                 break
             else:
@@ -155,6 +202,8 @@ class ResearchOrchestrator:
             "is_pass": is_pass,
             "evidence": [e.to_dict() if hasattr(e, "to_dict") else e for e in evidence_list],
             "conflicts": conflicts_list,
+            "reasons": reasons_list,
+            "coverage": coverage_map,
         })
         self._maybe_review("materials")
         return verified_context
