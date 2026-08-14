@@ -576,41 +576,51 @@ def _start_worker(project_id, project_dir, topic, resume=False):
     threading.Thread(target=_work, daemon=True).start()
 
 
-def _show_intermediates(state):
-    """暂停后展示各阶段中间产物（Step1：只读查看）。"""
+def _edit_intermediates(project_id, project_dir, state, ckpt):
+    """暂停后展示并编辑中间产物（Step2：可编辑，保存后触发下游重跑）。"""
     stages = state.get("stages", {})
     plan_data = (stages.get("plan") or {}).get("data") or {}
     collect_data = (stages.get("collect") or {}).get("data") or {}
     analyze_data = (stages.get("analyze") or {}).get("data") or {}
 
-    st.markdown('<div class="sec-title" style="margin-top:.4rem;">中间产物预览</div>', unsafe_allow_html=True)
-    t1, t2, t3 = st.tabs(["① 调研提纲", "② 已校验情报", "③ 分析结果"])
+    st.markdown('<div class="sec-title" style="margin-top:.4rem;">中间产物预览与编辑</div>', unsafe_allow_html=True)
+    t1, t2, t3 = st.tabs(["① 调研提纲", "② 已校验情报（可编辑）", "③ 分析结果"])
     with t1:
         if plan_data:
             st.json(plan_data)
         else:
-            st.caption("规划阶段尚未完成，暂无中间产物。")
+            st.caption("规划阶段尚未完成。")
     with t2:
-        vc = collect_data.get("verified_context", "")
-        if vc:
+        if collect_data:
+            vc = collect_data.get("verified_context", "")
             st.caption(f"质检轮次：第 {collect_data.get('round', '-')} 轮 / 共 {collect_data.get('max_rounds', '-')} 轮")
-            st.text_area("已校验情报（只读）", vc, height=220, disabled=True)
+            vc_key = f"edit_vc_{project_id}"
+            if vc_key not in st.session_state:
+                st.session_state[vc_key] = vc
+            st.text_area(
+                "已校验情报（可直接修改，保存后将从分析阶段重新执行）",
+                key=vc_key,
+                height=240,
+            )
+            if st.button("💾 保存修改", key="btn_save_vc"):
+                state = ckpt.load()
+                if state.get("stages", {}).get("collect"):
+                    state["stages"]["collect"]["data"]["verified_context"] = st.session_state[vc_key]
+                    ckpt.save(state)
+                ckpt.reset_from("analyze")  # 情报被人工修改，分析+排版需重跑
+                st.toast("已保存，点击「继续调研」将从分析阶段重新执行")
+                st.rerun()
         else:
-            st.caption("采集质检阶段尚未完成，暂无中间产物。")
+            st.caption("采集质检阶段尚未完成。")
     with t3:
         if analyze_data:
             st.json(analyze_data)
         else:
-            st.caption("分析阶段尚未完成，暂无中间产物。")
+            st.caption("分析阶段尚未完成（或已因修改情报而待重跑）。")
 
 
-def _render_run_panel(active):
-    """运行中/暂停中的进度面板：定时轮询 + 暂停/继续交互。"""
-    project_id = active["project_id"]
-    project_dir = active["project_dir"]
-    topic = active["topic"]
-    ckpt = Checkpoint(project_dir)
-
+def _render_running_fragment(project_id, project_dir, topic, ckpt):
+    """运行中：fragment 定时轮询进度 + 暂停按钮，状态变化时 rerun 交由主流程接管。"""
     @st.fragment(run_every=1.0)
     def _panel():
         state = ckpt.load()
@@ -624,43 +634,84 @@ def _render_run_panel(active):
             pipeline_html(derive_stages(entries), current_round(entries), entries[-10:]),
             unsafe_allow_html=True,
         )
-
-        status = state.get("status", "running")
-        if status == "running":
+        if state.get("status", "running") == "running":
             if st.button("⏸️ 暂停调研", key="btn_pause_run"):
                 ckpt.request_pause()
                 st.toast("暂停请求已发送，当前步骤完成后将暂停")
-        elif status == "paused":
-            st.info("⏸️ 调研已暂停，进度已保存。可查看中间产物，或点击继续。")
-            _show_intermediates(state)
-            if st.button("▶️ 继续调研", key="btn_resume_run", type="primary"):
-                ckpt.clear_pause()
-                _start_worker(project_id, project_dir, topic, resume=True)
-                st.toast("已继续，从断点恢复执行")
-        elif status == "completed":
-            plan_data = (state.get("stages", {}).get("plan") or {}).get("data") or {}
-            ai_data = (state.get("stages", {}).get("analyze") or {}).get("data") or {}
-            docx_path = ((state.get("stages", {}).get("format") or {}).get("data") or {}).get("docx_path", "")
-            final_result = {"plan_data": plan_data, "ai_data": ai_data, "docx_path": docx_path}
-            save_result(project_dir, project_id, topic, final_result)
-            st.session_state["active_run"] = None
-            st.session_state["report_data"] = {
-                "plan_data": plan_data,
-                "ai_data": ai_data,
-                "docx_path": docx_path,
-                "project_id": project_id,
-                "topic": topic,
-            }
-            st.session_state["nav_radio"] = PAGE_LABELS.get("report", "报告预览")
-            st.session_state["page"] = "report"
-            st.rerun()
-        elif status == "failed":
-            st.error("调研已中断，可返回项目历史查看日志，或重新发起。")
-            if st.button("← 返回新建调研", key="btn_back_new"):
-                st.session_state["active_run"] = None
-                st.rerun()
+        else:
+            st.rerun()  # 状态已变化，交给主流程接管
 
     _panel()
+
+
+def _render_paused_panel(project_id, project_dir, topic, ckpt, state):
+    """暂停中：展示进度 + 编辑中间产物 + 继续按钮（普通 widget，非 fragment）。"""
+    entries = read_log(project_dir)
+    st.markdown('<div class="sec-title">多智能体流水线</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="color:var(--muted);margin:0 0 .6rem;">课题：{html_escape(topic)}</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        pipeline_html(derive_stages(entries), current_round(entries), entries[-10:]),
+        unsafe_allow_html=True,
+    )
+    st.info("⏸️ 调研已暂停，进度已保存。可编辑中间产物后继续。")
+    _edit_intermediates(project_id, project_dir, state, ckpt)
+    if st.button("▶️ 继续调研", key="btn_resume_run", type="primary"):
+        ckpt.clear_pause()
+        _start_worker(project_id, project_dir, topic, resume=True)
+        st.toast("已继续，从断点恢复执行")
+        st.rerun()
+
+
+def _finalize_completed(project_id, project_dir, topic, state):
+    """收尾：落盘结果 + 跳转报告页。"""
+    plan_data = (state.get("stages", {}).get("plan") or {}).get("data") or {}
+    ai_data = (state.get("stages", {}).get("analyze") or {}).get("data") or {}
+    docx_path = ((state.get("stages", {}).get("format") or {}).get("data") or {}).get("docx_path", "")
+    final_result = {"plan_data": plan_data, "ai_data": ai_data, "docx_path": docx_path}
+    save_result(project_dir, project_id, topic, final_result)
+    st.session_state["active_run"] = None
+    st.session_state["report_data"] = {
+        "plan_data": plan_data,
+        "ai_data": ai_data,
+        "docx_path": docx_path,
+        "project_id": project_id,
+        "topic": topic,
+    }
+    st.session_state["nav_radio"] = PAGE_LABELS.get("report", "报告预览")
+    st.session_state["page"] = "report"
+    st.rerun()
+
+
+def _render_run_panel(active):
+    """运行面板入口：按 checkpoint 状态分发到 running / paused / completed / failed。"""
+    project_id = active["project_id"]
+    project_dir = active["project_dir"]
+    topic = active["topic"]
+    ckpt = Checkpoint(project_dir)
+
+    state = ckpt.load()
+    status = state.get("status", "running")
+
+    if status == "running":
+        _render_running_fragment(project_id, project_dir, topic, ckpt)
+    elif status == "paused":
+        _render_paused_panel(project_id, project_dir, topic, ckpt, state)
+    elif status == "completed":
+        _finalize_completed(project_id, project_dir, topic, state)
+    elif status == "failed":
+        entries = read_log(project_dir)
+        st.markdown('<div class="sec-title">多智能体流水线</div>', unsafe_allow_html=True)
+        st.markdown(
+            pipeline_html(derive_stages(entries), current_round(entries), entries[-10:]),
+            unsafe_allow_html=True,
+        )
+        st.error("调研已中断，可返回项目历史查看日志，或重新发起。")
+        if st.button("← 返回新建调研", key="btn_back_new"):
+            st.session_state["active_run"] = None
+            st.rerun()
 
 
 def render_new():

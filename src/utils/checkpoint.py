@@ -95,6 +95,19 @@ class Checkpoint:
             return self.STAGES[idx + 1]
         return name
 
+    def reset_from(self, name: str) -> None:
+        """把指定阶段及其之后的所有阶段重置为 pending。
+
+        用于中间产物被人工修改后，触发下游阶段重跑。例如编辑 verified_context
+        （属于 collect 阶段产物）后调用 reset_from("analyze")，续跑时会重新执行分析+排版。
+        """
+        state = self.load()
+        idx = list(self.STAGES).index(name)
+        for s in self.STAGES[idx:]:
+            state["stages"][s] = {"status": "pending", "data": None}
+        state["current_stage"] = name
+        self.save(state)
+
     # ---- 暂停信号（跨线程，用文件传递） ----
     def request_pause(self) -> None:
         state = self.load()
