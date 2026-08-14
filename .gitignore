@@ -38,9 +38,5 @@ Thumbs.db
 # === 早期草稿脚本 ===
 test_brain.py
 
-# === 未实现的技能占位（空文件，仍忽略） ===
-skills/native_word_chart/
-skills/pestel_analysis/
-
 # === 竞品参考资料 ===
 竞品项目/
