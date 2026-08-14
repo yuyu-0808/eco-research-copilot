@@ -33,18 +33,21 @@ class WebSearcher:
 
     def _ddg_search(self, query: str, max_results: int) -> str:
         try:
-            # 开启强制本地代理（针对国内网络）
-            os.environ["HTTP_PROXY"] = "http://127.0.0.1:7897"
-            os.environ["HTTPS_PROXY"] = "http://127.0.0.1:7897"
-            
+            # 可选代理：仅国内网络使用 DDG 时，在 .env 配置 DDG_PROXY（如 http://127.0.0.1:7890）
+            proxy = os.getenv("DDG_PROXY", "")
+            if proxy:
+                os.environ["HTTP_PROXY"] = proxy
+                os.environ["HTTPS_PROXY"] = proxy
+
             results = DDGS().text(query, max_results=max_results)
             search_context = ""
             for i, res in enumerate(results):
                 url = res.get('href') or res.get('url') or ''
                 search_context += f"【信源 {i+1}】标题: {res.get('title')}\n链接: {url}\n摘要: {res.get('body')}\n\n"
-                
-            os.environ.pop("HTTP_PROXY", None)
-            os.environ.pop("HTTPS_PROXY", None)
+
+            if proxy:
+                os.environ.pop("HTTP_PROXY", None)
+                os.environ.pop("HTTPS_PROXY", None)
             return search_context
         except Exception as e:
             return f"DDG 搜索失败 (可能是代理未开): {e}"

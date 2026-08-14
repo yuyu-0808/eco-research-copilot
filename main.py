@@ -597,7 +597,7 @@ def render_new():
             Config.SEARCH_PROVIDER = st.selectbox(
                 "搜索引擎", ["tavily", "ddg"],
                 index=0 if Config.SEARCH_PROVIDER == "tavily" else 1,
-                format_func=lambda s: "Tavily（推荐，需密钥）" if s == "tavily" else "DuckDuckGo（本地代理）",
+                format_func=lambda s: "Tavily（推荐，需密钥）" if s == "tavily" else "DuckDuckGo（可选代理）",
             )
         with c2:
             Config.MAX_COLLECT_ROUNDS = st.slider("采集轮数上限", 1, 5, int(Config.MAX_COLLECT_ROUNDS))
@@ -874,7 +874,7 @@ def render_settings():
     Config.SEARCH_PROVIDER = st.selectbox(
         "搜索引擎", ["tavily", "ddg"],
         index=0 if Config.SEARCH_PROVIDER == "tavily" else 1,
-        format_func=lambda s: "Tavily（推荐，需密钥）" if s == "tavily" else "DuckDuckGo（本地代理）",
+        format_func=lambda s: "Tavily（推荐，需密钥）" if s == "tavily" else "DuckDuckGo（可选代理）",
     )
     c1, c2 = st.columns(2)
     with c1:
