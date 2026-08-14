@@ -101,6 +101,7 @@ cp .env.example .env
 | `DEEPSEEK_API_KEY` | ✅ | LLM API Key |
 | `BASE_URL` | — | API 网关地址，默认官方 `https://api.deepseek.com` |
 | `MODEL_NAME` | — | 模型名，默认 `deepseek-chat` |
+| `BACKUP_MODEL` | — | 备用模型，主模型重试耗尽后自动切换降级（留空不启用） |
 | `SEARCH_PROVIDER` | — | `tavily`（推荐）/ `ddg`（可选代理） |
 | `TAVILY_API_KEY` | ✅ | 使用 Tavily 搜索时必填 |
 | `DDG_PROXY` | — | 使用 ddg 时的可选代理，如 `http://127.0.0.1:7890` |
