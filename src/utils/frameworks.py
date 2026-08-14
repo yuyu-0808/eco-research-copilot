@@ -97,7 +97,14 @@ def match_framework(topic: str) -> dict:
 
 
 def build_plan(topic: str, framework: dict = None) -> dict:
-    """基于框架生成标准化研究计划（outline + research_requirements），纯确定性、不依赖 LLM。"""
+    """基于框架生成标准化研究计划（outline + research_requirements），纯确定性、不依赖 LLM。
+
+    每个必答问题附带「数值口径契约」（value_spec）：
+    - ratio_range：比例型指标（渗透率/增速/份额等）的合理区间，越界将被确定性校验器拦截；
+    - unit：核心指标单位提示。
+
+    这是「先定规则再做」的关键：契约在研究开始前就固定下来，后续 Agent 只能在契约内工作。
+    """
     fw = framework if framework is not None else match_framework(topic)
     outline = [s["title"] for s in fw["sections"]]
     research_requirements = []
@@ -110,6 +117,8 @@ def build_plan(topic: str, framework: dict = None) -> dict:
             "min_evidence": s["min_evidence"],
             "min_tier": s["min_tier"],
             "section": s["title"],
+            # 数值口径契约：比例型章节自动加 0-100% 合理区间约束
+            "value_spec": _build_value_spec(s["metrics"]),
         })
     return {
         "topic": topic,
@@ -117,3 +126,17 @@ def build_plan(topic: str, framework: dict = None) -> dict:
         "outline": outline,
         "research_requirements": research_requirements,
     }
+
+
+# 比例型指标关键词：命中则说明该章核心指标应为 0-100% 口径
+_RATIO_METRIC_KEYS = [
+    "渗透率", "增速", "增长率", "份额", "占比", "集中度",
+    "毛利率", "净利率", "利润率", "复购率", "转化率", "国产化率",
+]
+
+
+def _build_value_spec(metrics: list) -> dict:
+    """根据核心指标判断该章是否需要比例口径约束（0-100% 越界拦截）。"""
+    if any(any(k in (m or "") for k in _RATIO_METRIC_KEYS) for m in metrics):
+        return {"ratio_range": [0, 100], "unit": "%"}
+    return None

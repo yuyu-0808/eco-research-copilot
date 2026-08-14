@@ -21,6 +21,31 @@ def _tier_ok(tier: str, min_tier: str) -> bool:
     return _TIER_RANK.get(tier, 0) >= _TIER_RANK.get(min_tier, 0)
 
 
+def _check_value_spec(evidence: list, spec: dict) -> list:
+    """检查证据数值是否越界（契约规定的合理区间）。
+
+    只校验「比例型」数值（百分比/成数/分数），避免误伤「3000 亿元」这类非比例数值。
+    返回越界问题列表（空 = 全部合规）。
+    """
+    if not spec:
+        return []
+    ratio_range = spec.get("ratio_range")
+    issues = []
+    for e in evidence:
+        if not e.value:
+            continue
+        nv = normalize_value(e.value)
+        if nv is None or not nv.is_ratio:
+            continue  # 非比例型数值不校验区间
+        pct = nv.value * 100
+        if ratio_range and not (ratio_range[0] <= pct <= ratio_range[1]):
+            issues.append(
+                f"「{e.claim}」数值 {e.value}（{pct:.1f}%）超出合理区间 "
+                f"{ratio_range[0]}~{ratio_range[1]}"
+            )
+    return issues
+
+
 def validate(plan_data: dict, evidence: list) -> dict:
     """对证据列表做确定性校验。
 
@@ -61,6 +86,16 @@ def validate(plan_data: dict, evidence: list) -> dict:
             if not high_tier:
                 tier_gaps.append(
                     f"「{req.get('text', section or qid)}」缺少 {min_tier} 级（{TIER_LABEL.get(min_tier, '')}）信源支撑"
+                )
+
+        # 数值口径契约校验（越界拦截：比例型指标超出合理区间）
+        spec = req.get("value_spec")
+        if spec:
+            spec_issues = _check_value_spec(matched, spec)
+            if spec_issues:
+                reasons.append(
+                    f"「{req.get('text', section or qid)}」{len(spec_issues)} 项数值越界："
+                    + spec_issues[0] + (" 等" if len(spec_issues) > 1 else "")
                 )
 
     # 数值矛盾检测：同 section 同 claim 出现不同 value → 标红
