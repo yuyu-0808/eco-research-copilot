@@ -32,9 +32,6 @@ Thumbs.db
 ~$*.docx
 ~$*.pptx
 
-# === 模板素材（本地死素材，不提交） ===
-/templates/
-
 # === 早期草稿脚本 ===
 test_brain.py
 
