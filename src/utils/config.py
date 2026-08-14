@@ -10,6 +10,9 @@ class Config:
     BASE_URL = os.getenv("BASE_URL", "https://api.deepseek.com")
     MODEL_NAME = os.getenv("MODEL_NAME", "deepseek-chat")
 
+    # 容错降级：备用模型（主模型重试耗尽后自动切换；留空则不启用）
+    BACKUP_MODEL = os.getenv("BACKUP_MODEL", "")
+
     # 搜索与工具配置 (支持灵活切换)
     SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "tavily")  # 可选 'tavily' 或 'ddg'
     TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")

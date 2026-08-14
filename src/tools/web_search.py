@@ -14,11 +14,30 @@ class WebSearcher:
             self.tavily_client = None
 
     def search(self, query: str, max_results: int = 3) -> str:
-        """统一对外的搜索接口"""
-        if self.provider == "tavily" and self.tavily_client:
-            return self._tavily_search(query, max_results)
-        else:
-            return self._ddg_search(query, max_results)
+        """统一对外的搜索接口。搜索失败时返回内置行业分析框架兜底（明确标记非实时数据）。"""
+        try:
+            if self.provider == "tavily" and self.tavily_client:
+                result = self._tavily_search(query, max_results)
+            else:
+                result = self._ddg_search(query, max_results)
+        except Exception:
+            result = ""
+        # 若搜索失败（返回错误文本或空），走内置框架兜底
+        if not result or result.startswith("Tavily 搜索失败") or result.startswith("DDG 搜索失败"):
+            return self._fallback_framework(query)
+        return result
+
+    def _fallback_framework(self, query: str) -> str:
+        """搜索完全失败时的业务级兜底：返回通用分析框架，严禁作为事实引用。"""
+        return (
+            f"【搜索降级兜底】针对「{query}」的实时检索失败（网络或搜索服务不可用）。\n"
+            "以下为内置的通用行业分析框架，仅供分析师参考，【不含实时数据，禁止作为事实引用】：\n"
+            "1. 行业现状：目标市场的规模、增速、渗透率现状（需后续核实）。\n"
+            "2. 竞争格局：主要厂商、市场份额、竞争壁垒（需后续核实）。\n"
+            "3. 政策与趋势：相关政策、补贴细则、技术演进方向（需后续核实）。\n"
+            "4. 风险提示：监管、技术、市场等潜在风险（需后续核实）。\n"
+            "注意：以上是框架性提示而非搜索结果，分析师应据此展开但不得编造任何具体数据。"
+        )
 
     def _tavily_search(self, query: str, max_results: int) -> str:
         try:

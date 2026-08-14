@@ -65,7 +65,7 @@ def parse_json_response(raw_content: str):
 
 
 def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retries=3, temperature=0.5):
-    """统一调用大模型：重试 + 指数退避 + 速率限制 + 空值判断 + JSON 解析"""
+    """统一调用大模型：重试 + 指数退避 + 速率限制 + 空值判断 + JSON 解析 + 备用模型降级"""
     global _last_api_call_time
     last_err = None
     for attempt in range(max_retries):
@@ -100,5 +100,33 @@ def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retr
         except Exception as e:
             last_err = e
             logger.log_event(agent_name, "WARNING", f"调用异常，准备重试: {e}")
+
+    # 主模型重试耗尽 → 尝试备用模型（容错降级）
+    backup = getattr(Config, 'BACKUP_MODEL', '') or ''
+    if backup and backup != model:
+        logger.log_event(agent_name, "WARNING", f"主模型 {model} 重试耗尽，切换备用模型 {backup} 再试")
+        try:
+            elapsed = time.time() - _last_api_call_time
+            rate_limit = getattr(Config, 'API_RATE_LIMIT_SECONDS', 5)
+            if elapsed < rate_limit:
+                time.sleep(rate_limit - elapsed)
+            _last_api_call_time = time.time()
+
+            response = client.chat.completions.create(
+                model=backup,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature
+            )
+            raw = response.choices[0].message.content
+
+            if need_json:
+                return parse_json_response(raw)
+            if not raw or not raw.strip():
+                raise ValueError("模型返回空内容")
+            return raw.strip()
+
+        except Exception as e:
+            last_err = e
+            logger.log_event(agent_name, "WARNING", f"备用模型调用也失败: {e}")
 
     raise ValueError(f"大模型多次调用失败，重试耗尽: {last_err}")

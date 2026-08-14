@@ -1,3 +1,4 @@
+import os
 import re
 from openai import OpenAI
 from src.utils.config import Config
@@ -41,7 +42,7 @@ class FormatterAgent:
         return polished
 
     def format_delivery(self, project_name: str, ai_data: dict) -> str:
-        """文字润色 + 排版，输出最终 Word 文档"""
+        """文字润色 + 排版，输出最终 Word 文档；排版失败时降级输出 Markdown 并标记风险。"""
         self.logger.log_event("Agent5_Formatter", "START", "开始文字润色与排版...")
 
         try:
@@ -57,5 +58,20 @@ class FormatterAgent:
             return docx_path
 
         except Exception as e:
-            self.logger.log_event("Agent5_Formatter", "FAILED", f"Word 引擎注入失败: {e}")
-            raise e
+            # 排版降级：Word 生成失败时，退回输出 Markdown 文件，不阻断流水线
+            self.logger.log_event("Agent5_Formatter", "WARNING", f"Word 排版失败，降级输出 Markdown: {e}")
+            md_path = self._save_markdown(project_name, ai_data)
+            self.logger.log_event("Agent5_Formatter", "WARNING", f"已降级输出 Markdown（风险标记）: {md_path}")
+            return md_path
+
+    def _save_markdown(self, project_name: str, ai_data: dict) -> str:
+        """排版降级兜底：把 Markdown 正文直接落盘为 .md 文件。"""
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        project_dir = os.path.join(root, "projects", project_name)
+        os.makedirs(project_dir, exist_ok=True)
+        md_path = os.path.join(project_dir, "05_final_report.md")
+        title = ai_data.get("report_title", "调研报告")
+        content = ai_data.get("markdown_report", "")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(f"# {title}\n\n{content}")
+        return md_path
