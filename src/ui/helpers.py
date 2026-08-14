@@ -12,15 +12,17 @@ from src.utils.checkpoint import Checkpoint
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PROJECTS_DIR = os.path.join(ROOT_DIR, "projects")
 
-# 智能体 -> 流水线阶段索引（用于前端可视化）
+# 智能体 -> 流水线阶段索引（用于前端可视化，6 步流水线）
 STAGE_MAP = {
     "课题架构师": 0,
     "信源研究员": 1,
     "事实稽核官": 2,
-    "内容撰写师": 3,
-    "交付渲染官": 4,
+    "结构提炼": 3,
+    "内容撰写师": 4,
+    "逻辑稽核": 4,
+    "交付渲染官": 5,
 }
-STAGE_NAMES = ["架构", "检索", "稽核", "撰写", "渲染"]
+STAGE_NAMES = ["架构", "检索", "稽核", "提炼", "撰写", "渲染"]
 
 
 def html_escape(s):
@@ -230,8 +232,8 @@ def dashboard_metrics():
 
 
 def derive_stages(entries):
-    """根据日志事件推导 5 个流水线阶段的实时状态：pending/active/done/error。"""
-    states = ["pending"] * 5
+    """根据日志事件推导 6 个流水线阶段的实时状态：pending/active/done/error。"""
+    states = ["pending"] * 6
     for e in entries:
         agent = e.get("agent", "")
         action = e.get("action", "")
@@ -248,7 +250,7 @@ def derive_stages(entries):
     # 全局熔断：Orchestrator 报错时，把仍处于 active 的阶段标为 error
     for e in entries:
         if e.get("action") in ("FAILED", "ERROR") and e.get("agent") == "Orchestrator":
-            for i in range(5):
+            for i in range(6):
                 if states[i] == "active":
                     states[i] = "error"
     return states

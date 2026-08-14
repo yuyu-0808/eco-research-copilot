@@ -26,8 +26,8 @@ class AuditorAgent:
         {raw_context}
 
         【提炼规则 (必须严格执行)】：
-        1. 过滤垃圾：如果素材中包含无关信息或极低质量的营销号内容（D级信源），【不要报错】，直接默默丢弃它们即可。
-        2. 提取真金：只要在素材中找到了哪怕一点点有用的、权威的数据（S/A/B级），就将其提炼到 verified_context 中。
+        1. 信源分级采信：每条信源已标注等级（S官方/A权威/B一般/D低质）。S/A级优先采信；B级谨慎对待（仅当无更优信源时用）；D级（低质/营销号）直接丢弃，【不要报错】。
+        2. 提取真金：优先从 S/A 级信源提炼有用数据；若某必答问题只有 B 级信源支撑，也提炼但保留其来源等级，供下游判断。
         3. 保留来源：每条提炼出来的事实，必须在其后标注原始来源，格式为「（来源：标题 链接）」，严禁丢失来源信息，供下游内容撰写师引用。
         4. 宽容放行：只要你提炼出了任何有价值的信息，就强制设置 "is_pass": true。「有价值」包括两类：① 精确数据（数值、统计）；② 权威定性信息（政策表述、官方表态、行业趋势、研究报告结论）。若某必答问题只拿到定性信息而缺精确数字，也要放行，并在 verified_context 中如实标注「精确数据待核实」。
         5. 极端情况：只有当所有原始素材【全部都是垃圾】、【完全毫无用处】（连任何相关的定性信息都没有）时，才设置 "is_pass": false，并给出 feedback。不要因为「缺精确数字」就打回，只要搜到了相关权威信息就应放行。
@@ -56,4 +56,44 @@ class AuditorAgent:
 
         except Exception as e:
             self.logger.log_event("事实稽核官", "FAILED", f"事实稽核过程发生异常: {e}")
+            raise e
+
+    def verify_logic(self, topic: str, markdown_report: str, references: list, safe_context: str) -> dict:
+        """逻辑校验：论据溯源 + 逻辑矛盾排查，用于撰写-稽核交叉校验循环。"""
+        ref_text = "\n".join(f"[{r.get('index')}] {r.get('title')}" for r in (references or [])) or "（无）"
+        self.logger.log_event("逻辑稽核", "START", "开始逻辑校验（论据溯源 + 逻辑矛盾排查）")
+
+        prompt = f"""
+        你是一位【事实稽核官】，负责对研究报告正文做「逻辑校验」。
+
+        课题：{topic}
+        【参考文献清单（正文用 [n] 引用）】：
+        {ref_text}
+
+        【待校验正文】：
+        {markdown_report}
+
+        【校验规则】：
+        1. 论据溯源：正文中的关键数据、结论是否用 [n] 标注了引用编号？引用编号是否都在参考文献清单中存在？若正文出现精确数据却无任何引用来源，视为「疑似编造」，需打回。
+        2. 逻辑矛盾：正文前后是否存在数据不一致、结论互相矛盾、因果跳跃等逻辑问题？
+        3. 宽容原则：只对「硬伤」打回（无来源的精确数据、明显的逻辑矛盾）。一般性表述、修辞、章节详略不均等非硬伤，应放行。
+
+        请严格按 JSON 输出（is_pass 必须是布尔值）：
+        {{
+            "is_pass": true,
+            "feedback": "仅当 is_pass=false 时填写：指出具体哪一处无溯源或逻辑矛盾，指导撰写师如何修改"
+        }}
+        """
+
+        try:
+            result = call_llm(self.client, self.model, self.logger, "逻辑稽核", prompt, need_json=True)
+            is_pass = result.get("is_pass", False)
+            if is_pass:
+                self.logger.log_event("逻辑稽核", "SUCCESS", "逻辑校验通过，论据溯源完整、无逻辑矛盾。")
+            else:
+                self.logger.log_event("逻辑稽核", "ACTION", f"逻辑校验发现争议，打回修正。意见: {result.get('feedback')}")
+            return result
+
+        except Exception as e:
+            self.logger.log_event("逻辑稽核", "FAILED", f"逻辑校验发生异常: {e}")
             raise e

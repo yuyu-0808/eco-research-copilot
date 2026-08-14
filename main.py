@@ -12,6 +12,7 @@ import streamlit as st
 
 from src.utils.config import Config
 from src.utils.checkpoint import Checkpoint, PauseRequested
+from src.utils.source_grade import source_grade
 from src.orchestrator import ResearchOrchestrator
 from src.ui.helpers import (
     PROJECTS_DIR,
@@ -371,9 +372,10 @@ def pipeline_html(states, rnd, logs):
     stages = [
         ("01", "架构", "课题架构师 · 拆解课题"),
         ("02", "检索", "信源研究员 · 多源检索"),
-        ("03", "稽核", "事实稽核官 · 防幻觉"),
-        ("04", "撰写", "内容撰写师 · 建模撰文"),
-        ("05", "渲染", "交付渲染官 · 交付"),
+        ("03", "稽核", "事实稽核官 · 事实校验"),
+        ("04", "提炼", "交付渲染官 · 结构化"),
+        ("05", "撰写", "内容撰写师 · 撰写正文"),
+        ("06", "渲染", "交付渲染官 · 排版交付"),
     ]
     icon = {"pending": "", "active": "", "done": "✓", "error": "!"}
     cells = []
@@ -790,20 +792,6 @@ def render_new():
         st.rerun()
 
 
-_SOURCE_S = ["gov", "edu", "oecd", "un.org", "worldbank", "imf.org", "who.int", ".ac.cn", "stats", "mofcom", "ndrc", "nea.gov", "miit"]
-_SOURCE_A = ["xinhua", "people.com", "caixin", "reuters", "bloomberg", "ft.com", "wsj.com", "eastmoney", "36kr", "ifeng", "sina.com", "163.com", "chinanews", "ce.cn", "yicai", "cls.cn"]
-
-
-def source_grade(url):
-    """根据域名启发式推断信源等级：S=官方/权威机构，A=权威媒体，B=一般信源。"""
-    u = (url or "").lower()
-    if any(k in u for k in _SOURCE_S):
-        return "S", "官方信源"
-    if any(k in u for k in _SOURCE_A):
-        return "A", "权威信源"
-    return "B", "一般信源"
-
-
 def render_report():
     data = st.session_state["report_data"]
     ai_data = data.get("ai_data", {}) or {}
@@ -887,8 +875,8 @@ def render_report():
             idx = r.get("index", "")
             title = r.get("title", "") or ""
             url = r.get("url", "") or ""
-            grade, grade_label = source_grade(url)
-            grade_cls = {"S": "badge-grade-s", "A": "badge-grade-a", "B": "badge-grade-b"}[grade]
+            grade, grade_label = source_grade(url, title)
+            grade_cls = {"S": "badge-grade-s", "A": "badge-grade-a", "B": "badge-grade-b", "D": "badge-grade-b"}.get(grade, "badge-grade-b")
             grade_badge = f'<span class="badge {grade_cls}">{grade} · {grade_label}</span>'
             if url:
                 st.markdown(

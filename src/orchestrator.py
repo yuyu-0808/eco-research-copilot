@@ -1,4 +1,3 @@
-import os
 from src.utils.logger import AgentLogger
 from src.utils.config import Config
 from src.utils.checkpoint import Checkpoint, PauseRequested
@@ -17,7 +16,7 @@ class ResearchOrchestrator:
         self.ckpt = Checkpoint(self.project_dir)
         self.resume = resume
 
-        # 初始化 5 类专业角色 (课题架构师 / 信源研究员 / 事实稽核官 / 内容撰写师 / 交付渲染官)
+        # 初始化 5 类专业角色（课题架构师 / 信源研究员 / 事实稽核官 / 内容撰写师 / 交付渲染官）
         self.architect = ArchitectAgent(self.logger)
         self.researcher = ResearcherAgent(self.logger)
         self.auditor = AuditorAgent(self.logger)
@@ -25,7 +24,7 @@ class ResearchOrchestrator:
         self.renderer = RendererAgent(self.logger)
 
     # ------------------------------------------------------------------
-    # 主入口
+    # 主入口：6 步流水线 + 两个内循环
     # ------------------------------------------------------------------
     def run(self, user_topic: str) -> dict:
         self.logger.log_event("Orchestrator", "START", f"开始执行调研流水线: {user_topic}")
@@ -37,21 +36,31 @@ class ResearchOrchestrator:
         state["pause_requested"] = False
         if not self.resume:
             state["stages"] = {s: {"status": "pending", "data": None} for s in self.ckpt.STAGES}
-            state["current_stage"] = "plan"
+            state["current_stage"] = "architect"
         self.ckpt.save(state)
 
         try:
-            plan_data = self._stage_plan(user_topic)
-            verified_context = self._stage_collect(plan_data)
-            ai_data = self._stage_analyze(plan_data, verified_context)
-            docx_path = self._stage_format(ai_data)
+            plan_data = self._stage_architect(user_topic)
+            verified_context = self._stage_research_verify(plan_data)
+            structure = self._stage_structure(plan_data, verified_context)
+            markdown_report = self._stage_write_audit(plan_data, structure, verified_context)
+            docx_path = self._stage_render(structure, markdown_report)
 
             self.ckpt.set_status("completed")
             self.logger.log_event("Orchestrator", "SUCCESS", "🎉 全链路自动调研圆满完成！")
+
             return {
                 "plan_data": plan_data,
-                "ai_data": ai_data,
-                "docx_path": docx_path
+                "ai_data": {
+                    "report_title": structure.get("report_title", ""),
+                    "publish_date": structure.get("publish_date", ""),
+                    "core_insights": structure.get("core_insights", ""),
+                    "markdown_report": markdown_report,
+                    "charts": structure.get("charts", []),
+                    "tables": structure.get("tables", []),
+                    "references": structure.get("references", []),
+                },
+                "docx_path": docx_path,
             }
 
         except PauseRequested:
@@ -66,25 +75,24 @@ class ResearchOrchestrator:
     # ------------------------------------------------------------------
     # 阶段 1：课题架构
     # ------------------------------------------------------------------
-    def _stage_plan(self, user_topic: str) -> dict:
+    def _stage_architect(self, user_topic: str) -> dict:
         state = self.ckpt.load()
-        if self.resume and self.ckpt.stage_done("plan", state):
-            data = self.ckpt.stage_data("plan", state)
+        if self.resume and self.ckpt.stage_done("architect", state):
+            data = self.ckpt.stage_data("architect", state)
             self.logger.log_event("Orchestrator", "INFO", "♻️ 断点续跑：阶段「架构」已完成，跳过。")
             return data
-
         self.ckpt.check_pause()
         plan_data = self.architect.generate_plan(user_topic)
-        self.ckpt.mark_done("plan", plan_data)
+        self.ckpt.mark_done("architect", plan_data)
         return plan_data
 
     # ------------------------------------------------------------------
-    # 阶段 2 & 3：信源检索与事实稽核的内循环 (核心壁垒：防幻觉质量门)
+    # 阶段 2 & 3：信源检索与事实稽核的内循环（评级驱动）
     # ------------------------------------------------------------------
-    def _stage_collect(self, plan_data: dict) -> str:
+    def _stage_research_verify(self, plan_data: dict) -> str:
         state = self.ckpt.load()
-        if self.resume and self.ckpt.stage_done("collect", state):
-            data = self.ckpt.stage_data("collect", state) or {}
+        if self.resume and self.ckpt.stage_done("verify", state):
+            data = self.ckpt.stage_data("verify", state) or {}
             self.logger.log_event("Orchestrator", "INFO", "♻️ 断点续跑：阶段「检索+稽核」已完成，跳过。")
             return data.get("verified_context", "")
 
@@ -98,10 +106,7 @@ class ResearchOrchestrator:
             self.ckpt.check_pause()  # 每轮边界也支持暂停
             self.logger.log_event("Orchestrator", "INFO", f"=== 开启第 {current_round}/{max_rounds} 轮信源稽核循环 ===")
 
-            # 信源研究员执行检索
             raw_context = self.researcher.collect_data(plan_data, feedback)
-
-            # 事实稽核官执行校验
             verify_result = self.auditor.verify_data(plan_data, raw_context)
             is_pass = verify_result.get("is_pass", False)
 
@@ -124,7 +129,8 @@ class ResearchOrchestrator:
         if not is_pass:
             verified_context = "（注：证据不充分，但已跳过拦截）" + raw_context
 
-        self.ckpt.mark_done("collect", {
+        self.ckpt.mark_done("research", {"verified_context": verified_context})
+        self.ckpt.mark_done("verify", {
             "verified_context": verified_context,
             "round": current_round,
             "max_rounds": max_rounds,
@@ -133,31 +139,80 @@ class ResearchOrchestrator:
         return verified_context
 
     # ------------------------------------------------------------------
-    # 阶段 4：内容撰写
+    # 阶段 4：结构化提炼（交付渲染官 · 前置）
     # ------------------------------------------------------------------
-    def _stage_analyze(self, plan_data: dict, verified_context: str) -> dict:
+    def _stage_structure(self, plan_data: dict, verified_context: str) -> dict:
         state = self.ckpt.load()
-        if self.resume and self.ckpt.stage_done("analyze", state):
-            data = self.ckpt.stage_data("analyze", state)
-            self.logger.log_event("Orchestrator", "INFO", "♻️ 断点续跑：阶段「撰写」已完成，跳过。")
+        if self.resume and self.ckpt.stage_done("structure", state):
+            data = self.ckpt.stage_data("structure", state)
+            self.logger.log_event("Orchestrator", "INFO", "♻️ 断点续跑：阶段「结构化提炼」已完成，跳过。")
             return data
-
         self.ckpt.check_pause()
-        ai_data = self.writer.analyze(plan_data, verified_context)
-        self.ckpt.mark_done("analyze", ai_data)
-        return ai_data
+        topic = plan_data.get("topic")
+        safe_context = verified_context[:5000] if verified_context else "（无可用底层数据）"
+        structure = self.renderer.generate_structure(topic, safe_context)
+        self.ckpt.mark_done("structure", structure)
+        return structure
 
     # ------------------------------------------------------------------
-    # 阶段 5：渲染交付
+    # 阶段 5：内容撰写 + 逻辑稽核交叉校验内循环
     # ------------------------------------------------------------------
-    def _stage_format(self, ai_data: dict) -> str:
+    def _stage_write_audit(self, plan_data: dict, structure: dict, verified_context: str) -> str:
         state = self.ckpt.load()
-        if self.resume and self.ckpt.stage_done("format", state):
-            data = self.ckpt.stage_data("format", state) or {}
-            self.logger.log_event("Orchestrator", "INFO", "♻️ 断点续跑：阶段「渲染」已完成，跳过。")
-            return data.get("docx_path", "")
+        if self.resume and self.ckpt.stage_done("write", state):
+            data = self.ckpt.stage_data("write", state) or {}
+            self.logger.log_event("Orchestrator", "INFO", "♻️ 断点续跑：阶段「撰写+逻辑稽核」已完成，跳过。")
+            return data.get("markdown_report", "")
 
+        topic = plan_data.get("topic")
+        safe_context = verified_context[:5000] if verified_context else "（无可用底层数据）"
+        references = structure.get("references", [])
+        max_rounds = Config.WRITE_AUDIT_ROUNDS
+        current_round = 1
+        markdown_report = ""
+        feedback = None
+        is_pass = False
+
+        while current_round <= max_rounds:
+            self.ckpt.check_pause()
+            self.logger.log_event("Orchestrator", "INFO", f"=== 开启第 {current_round}/{max_rounds} 轮撰写-稽核交叉校验 ===")
+            markdown_report = self.writer.write_report(topic, structure, safe_context, feedback)
+            logic_result = self.auditor.verify_logic(topic, markdown_report, references, safe_context)
+            is_pass = logic_result.get("is_pass", False)
+            if is_pass:
+                self.logger.log_event("Orchestrator", "SUCCESS", "✅ 逻辑稽核通过，正文定稿。")
+                break
+            else:
+                feedback = logic_result.get("feedback", "逻辑校验未通过")
+                self.logger.log_event("Orchestrator", "WARNING", f"⚠️ 逻辑稽核发现争议，打回修正。意见: {feedback}")
+                current_round += 1
+
+        # 交叉校验为软门禁：轮次耗尽仍未通过时，宽容采用当前版本
+        if not is_pass:
+            self.logger.log_event("Orchestrator", "WARNING", "⚠️ 交叉校验轮次耗尽，采用当前版本正文（逻辑校验为软门禁）。")
+
+        self.ckpt.mark_done("write", {"markdown_report": markdown_report, "is_pass": is_pass, "round": current_round})
+        return markdown_report
+
+    # ------------------------------------------------------------------
+    # 阶段 6：渲染排版（交付渲染官 · 后置）
+    # ------------------------------------------------------------------
+    def _stage_render(self, structure: dict, markdown_report: str) -> str:
+        state = self.ckpt.load()
+        if self.resume and self.ckpt.stage_done("render", state):
+            data = self.ckpt.stage_data("render", state) or {}
+            self.logger.log_event("Orchestrator", "INFO", "♻️ 断点续跑：阶段「渲染排版」已完成，跳过。")
+            return data.get("docx_path", "")
         self.ckpt.check_pause()
+        ai_data = {
+            "report_title": structure.get("report_title", ""),
+            "publish_date": structure.get("publish_date", ""),
+            "core_insights": structure.get("core_insights", ""),
+            "markdown_report": markdown_report,
+            "charts": structure.get("charts", []),
+            "tables": structure.get("tables", []),
+            "references": structure.get("references", []),
+        }
         docx_path = self.renderer.format_delivery(self.project_name, ai_data)
-        self.ckpt.mark_done("format", {"docx_path": docx_path})
+        self.ckpt.mark_done("render", {"docx_path": docx_path})
         return docx_path

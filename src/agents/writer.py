@@ -10,46 +10,26 @@ class WriterAgent:
         self.client = OpenAI(api_key=Config.DEEPSEEK_API_KEY, base_url=Config.BASE_URL)
         self.model = Config.MODEL_NAME
 
-    def _gen_structure(self, topic: str, safe_context: str) -> dict:
-        """第一步：结构化提炼（短 JSON，含标题/洞察/大纲/多图表/多表格/参考文献）"""
-        prompt = f"""
-        你是一位【内容撰写师】。
-        课题：{topic}
-        【已核验的数据与信源】：
-        {safe_context}
+    def write_report(self, topic: str, structure: dict, safe_context: str, feedback: str = None) -> str:
+        """根据结构化提炼结果，撰写研究报告正文（标准一次性 / 深度分章）。feedback 为稽核官打回意见。"""
+        mode_label = "深度分章" if Config.REPORT_MODE == "deep" else "标准"
+        suffix = "（修订稿）" if feedback else ""
+        self.logger.log_event("内容撰写师", "START", f"开始撰写正文[{mode_label}模式]{suffix}")
 
-        请完成第一阶段的「结构化提炼」，直接输出纯 JSON（不要代码块标记）：
+        outline = structure.get("outline", [])
+        references = structure.get("references", [])
+        charts = structure.get("charts", [])
+        tables = structure.get("tables", [])
 
-        1. report_title：一个客观、正式的学术研究报告标题，例如「泰国新能源汽车市场渗透率的演变、动因与政策影响」。禁止营销号风格（堆砌数字、反问句、感叹号、问号）。
-        2. publish_date：发布日期，格式「2026年08月」。
-        3. core_insights：一段 150 到 250 字的摘要，概括本报告的核心数据、关键发现、主要结论与政策含义，要有分析性论述而非简单罗列数字。
-        4. outline：研究报告的 5 个章节标题，用「一、二、三...」编号。
-        5. charts：2 到 4 张图。根据数据性质自选类型：时间趋势用 line，分类对比用 bar，占比结构用 pie。每张图给出 title（完整图题，如「图1：XX趋势」）、label（图例用，指标名+单位，如「销量(万辆)」）、labels（分类或年份标签）、data（数值数组）。
-        6. tables：1 到 2 张表。每张表给出 title、headers（表头）、rows（数据行数组）。
-        7. references：参考文献列表，只引用【已核验的数据与信源】里真实出现过的来源（标题+URL），严禁编造。
+        if Config.REPORT_MODE == "deep":
+            markdown_report = self._gen_body_deep(topic, outline, safe_context, references, charts, tables, feedback)
+            self.logger.log_event("内容撰写师", "SUCCESS", "深度模式正文撰写完成（分章生成）")
+        else:
+            markdown_report = self._gen_body(topic, outline, safe_context, references, charts, tables, feedback)
+            self.logger.log_event("内容撰写师", "SUCCESS", "标准模式正文撰写完成")
+        return markdown_report
 
-        严格按以下 JSON 结构输出：
-        {{
-            "report_title": "学术化标题",
-            "publish_date": "2026年08月",
-            "core_insights": "一段150-250字的摘要，含核心数据、关键发现、主要结论与政策含义",
-            "outline": ["一、引言", "二、市场现状", "三、竞争格局", "四、趋势研判", "五、结论与建议"],
-            "charts": [
-                {{"type": "line", "title": "图1：销量趋势", "label": "销量(万辆)", "labels": ["2020","2021","2022","2023","2024"], "data": [1,2,3,4,5]}},
-                {{"type": "bar", "title": "图2：厂商份额对比", "label": "市场份额(%)", "labels": ["A","B","C"], "data": [10,20,30]}},
-                {{"type": "pie", "title": "图3：结构占比", "label": "占比(%)", "labels": ["X","Y"], "data": [60,40]}}
-            ],
-            "tables": [
-                {{"title": "表1：政策梳理", "headers": ["政策", "年份", "内容"], "rows": [["a","b","c"],["d","e","f"]]}}
-            ],
-            "references": [
-                {{"index": 1, "title": "信源标题", "url": "https://..."}}
-            ]
-        }}
-        """
-        return call_llm(self.client, self.model, self.logger, "内容撰写师", prompt, need_json=True)
-
-    def _gen_body(self, topic: str, outline, safe_context: str, references, charts, tables) -> str:
+    def _gen_body(self, topic: str, outline, safe_context: str, references, charts, tables, feedback: str = None) -> str:
         """模式一（标准）：一次性生成全文，降字数 + 强完整性约束"""
         outline_text = "\n".join(str(o) for o in (outline or []))
         ref_text = "\n".join(f"[{r.get('index')}] {r.get('title')}（{r.get('url')}）" for r in (references or []))
@@ -82,9 +62,11 @@ class WriterAgent:
 
         请开始撰写正文：
         """
+        if feedback:
+            prompt += f"\n\n【重要：上一版被事实稽核官驳回，修改意见如下，请据此修正相关问题】\n{feedback}\n"
         return call_llm(self.client, self.model, self.logger, "内容撰写师", prompt, need_json=False, temperature=0.7)
 
-    def _gen_body_deep(self, topic: str, outline, safe_context: str, references, charts, tables) -> str:
+    def _gen_body_deep(self, topic: str, outline, safe_context: str, references, charts, tables, feedback: str = None) -> str:
         """模式二（深度）：分章生成，每章一次请求，内容更充实、不易截断"""
         ref_text = "\n".join(f"[{r.get('index')}] {r.get('title')}（{r.get('url')}）" for r in (references or []))
         chart_text = "\n".join(f"图{i}：{c.get('title')}" for i, c in enumerate(charts or [], 1)) or "（无）"
@@ -114,53 +96,8 @@ class WriterAgent:
 
             请撰写【{sec}】这一章：
             """
+            if feedback:
+                prompt += f"\n\n【重要：上一版被事实稽核官驳回，修改意见如下，请据此修正】\n{feedback}\n"
             section = call_llm(self.client, self.model, self.logger, "内容撰写师", prompt, need_json=False, temperature=0.7)
             sections.append(section.strip())
         return "\n\n".join(sections)
-
-    def analyze(self, plan_data: dict, verified_context: str) -> dict:
-        topic = plan_data.get("topic")
-        mode_label = "深度分章" if Config.REPORT_MODE == "deep" else "标准"
-        self.logger.log_event("内容撰写师", "START", f"开始内容撰写（结构化提炼 + 正文撰写[{mode_label}模式]）")
-
-        # 截断超长上下文，防止撑爆 Token 上限
-        safe_context = verified_context[:5000] if verified_context else "（无可用底层数据）"
-
-        # 第一步：结构化提炼（标题/洞察/大纲/多图表/多表格/参考文献）
-        structure = self._gen_structure(topic, safe_context)
-        self.logger.log_event(
-            "内容撰写师", "SUCCESS",
-            f"结构化提炼完成：{len(structure.get('charts', []))} 张图、{len(structure.get('tables', []))} 张表"
-        )
-
-        # 第二步：正文撰写（标准一次性 / 深度分章）
-        if Config.REPORT_MODE == "deep":
-            markdown_report = self._gen_body_deep(
-                topic,
-                structure.get("outline", []),
-                safe_context,
-                structure.get("references", []),
-                structure.get("charts", []),
-                structure.get("tables", []),
-            )
-            self.logger.log_event("内容撰写师", "SUCCESS", "深度模式正文撰写完成（分章生成）")
-        else:
-            markdown_report = self._gen_body(
-                topic,
-                structure.get("outline", []),
-                safe_context,
-                structure.get("references", []),
-                structure.get("charts", []),
-                structure.get("tables", []),
-            )
-            self.logger.log_event("内容撰写师", "SUCCESS", "标准模式正文撰写完成")
-
-        return {
-            "report_title": structure.get("report_title", ""),
-            "publish_date": structure.get("publish_date", ""),
-            "core_insights": structure.get("core_insights", ""),
-            "markdown_report": markdown_report,
-            "charts": structure.get("charts", []),
-            "tables": structure.get("tables", []),
-            "references": structure.get("references", []),
-        }

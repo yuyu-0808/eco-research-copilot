@@ -4,6 +4,7 @@ from src.utils.config import Config
 from src.utils.logger import AgentLogger
 from src.tools.web_search import WebSearcher
 from src.utils.llm_utils import call_llm
+from src.utils.source_grade import source_grade
 
 class ResearcherAgent:
     def __init__(self, logger: AgentLogger):
@@ -49,8 +50,17 @@ class ResearcherAgent:
             raw_context = ""
             for q in queries:
                 self.logger.log_event("信源研究员", "ACTION", f"正在检索信源: {q}")
-                result = self.searcher.search(q, max_results=5) # 每次搜索最多返回5条结果
-                raw_context += f"【搜索词: {q}】的返回结果：\n{result}\n" + "-"*30 + "\n"
+                sources = self.searcher.search(q, max_results=5)  # 每次搜索最多返回5条
+                raw_context += f"【搜索词: {q}】的返回结果：\n"
+                for i, s in enumerate(sources, 1):
+                    url = s.get("url", "")
+                    title = s.get("title", "")
+                    if url:
+                        grade, label = source_grade(url, title)
+                        raw_context += f"【信源 {i} · {grade}级{label}】标题: {title}\n链接: {url}\n核心事实: {s.get('snippet','')}\n\n"
+                    else:
+                        raw_context += f"【信源 {i} · 兜底】{title}\n{s.get('snippet','')}\n\n"
+                raw_context += "-" * 30 + "\n"
                 
             self.logger.log_event("信源研究员", "SUCCESS", "本轮信源检索完毕。")
             return raw_context

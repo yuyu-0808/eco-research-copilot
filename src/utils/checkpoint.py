@@ -17,8 +17,8 @@ class PauseRequested(Exception):
 
 
 class Checkpoint:
-    # 流水线四个阶段（顺序固定）
-    STAGES = ("plan", "collect", "analyze", "format")
+    # 流水线六个阶段（顺序固定）：课题架构 / 信源检索 / 事实稽核 / 结构化提炼 / 内容撰写 / 渲染排版
+    STAGES = ("architect", "research", "verify", "structure", "write", "render")
 
     def __init__(self, project_dir: str):
         self.project_dir = project_dir
