@@ -4,7 +4,7 @@ from src.utils.config import Config
 from src.utils.logger import AgentLogger
 from src.tools.web_search import WebSearcher
 from src.utils.llm_utils import call_llm
-from src.utils.source_grade import source_grade
+from src.utils.source_grade import source_grade, load_source_skill_doc
 from src.utils.evidence import EvidenceRecord, records_to_text
 from src.utils.validator import infer_publisher
 
@@ -29,10 +29,14 @@ class ResearcherAgent:
 
         self.logger.log_event("信源研究员", "START", f"开始为课题检索信源: {topic}")
 
+        skill_doc = load_source_skill_doc()
         prompt = f"""
         你是一位【信源研究员】，擅长根据调研课题与必答清单设计精准的多维度检索策略。
         当前调研课题："{topic}"
         我们的必答需求清单是：{requirements}
+
+        【信源评级规范（检索策略须对齐此规范）】：
+        {skill_doc or "优先覆盖 A 一手官方 / B 权威媒体 / C 行业专业级信源"}
         """
         if feedback:
             prompt += f"\n上一轮检索被事实稽核官退回，反馈意见：\n{feedback}\n请生成全新的、更具体的搜索词。"
@@ -71,7 +75,7 @@ class ResearcherAgent:
                     if url:
                         grade, label = source_grade(url, title)
                     else:
-                        grade, label = "B", "兜底信源"
+                        grade, label = "F", "无法判断"
 
                     # 去重（同 URL 只保留一条）
                     if url and url in seen_urls:

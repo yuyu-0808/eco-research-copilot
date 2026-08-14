@@ -5,6 +5,7 @@ from src.utils.logger import AgentLogger
 from src.utils.llm_utils import call_llm
 from src.utils.evidence import EvidenceRecord, records_to_text
 from src.utils.validator import validate
+from src.utils.source_grade import load_source_skill_doc
 
 
 class AuditorAgent:
@@ -73,9 +74,13 @@ class AuditorAgent:
         if not raw_context:
             return []
         req_text = json.dumps(requirements, ensure_ascii=False)
+        skill_doc = load_source_skill_doc()
         prompt = f"""
         你是【事实稽核官】的提炼助手。请从下面的原始素材中提炼出高纯度事实，
         并把每条事实归属到对应的必答问题（question_id）。
+
+        【信源评级规范（A-F 六级，必须遵守）】：
+        {skill_doc or "A 官方 / B 权威媒体 / C 行业专业 / D 一般 / E 低质 / F 无法判断，E/F 丢弃"}
 
         课题：{topic}
         【必答问题清单（含 question_id）】：
@@ -85,7 +90,7 @@ class AuditorAgent:
         {raw_context}
 
         提炼规则：
-        1. 丢弃 D 级（低质/营销号）素材，不要提炼；
+        1. E 级（低质/营销号）与 F 级（无法判断）素材直接丢弃，不提炼；A/B/C 级优先采信，D 级谨慎；
         2. 每条事实须来自真实素材，严禁编造，并保留原信源的标题与链接；
         3. 若素材是"搜索降级兜底"（不含实时数据），不要作为事实提炼；
         4. 尽量抽取精确数值，填入 value/unit/period（无则留空）。
@@ -149,7 +154,7 @@ class AuditorAgent:
                 period=item.get("period"),
                 source_title=title,
                 source_url=url,
-                source_tier=tier or "B",
+                source_tier=tier or "D",
                 publisher=publisher,
                 excerpt=item.get("excerpt", "") or item.get("claim", ""),
                 section=item.get("section", ""),
@@ -163,9 +168,9 @@ class AuditorAgent:
                 excerpt=getattr(r, "excerpt", ""),
                 source_title=getattr(r, "source_title", ""),
                 source_url=getattr(r, "source_url", ""),
-                source_tier=getattr(r, "source_tier", "B"),
+                source_tier=getattr(r, "source_tier", "D"),
                 publisher=getattr(r, "publisher", ""),
-            ) for r in raw_evidence if getattr(r, "source_tier", "") != "D"]
+            ) for r in raw_evidence if getattr(r, "source_tier", "") not in ("E", "F")]
         return out
 
     def verify_logic(self, topic: str, markdown_report: str, references: list, safe_context: str) -> dict:

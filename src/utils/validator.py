@@ -1,8 +1,8 @@
 """确定性校验器：框架合规性 + 证据匹配度双重校验。
 
 不依赖模型自评——用纯代码核对：
-1. 每个必答问题（章节）是否匹配了足够数量的有效证据（丢弃 D 级后计数）；
-2. 核心指标是否有满足最低信源等级（S/A/B）的证据支撑；
+1. 每个必答问题（章节）是否匹配了足够数量的有效证据（丢弃 E/F 级后计数）；
+2. 核心指标是否有满足最低信源等级（A/B/C）的证据支撑；
 3. 同一章节内的数值矛盾自动标红（保留人工判断入口）。
 
 校验结果只由代码给出，模型输出无法改写结论。
@@ -12,7 +12,7 @@ from .evidence import EvidenceRecord, TIER_LABEL
 from .source_grade import source_grade
 from .normalizer import normalize_value
 
-_TIER_RANK = {"S": 4, "A": 3, "B": 2, "D": 1, "": 0}
+_TIER_RANK = {"A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "F": 1, "": 0}
 
 
 def _tier_ok(tier: str, min_tier: str) -> bool:
@@ -68,11 +68,11 @@ def validate(plan_data: dict, evidence: list) -> dict:
         min_ev = int(req.get("min_evidence", 1) or 1)
         min_tier = req.get("min_tier") or ""
 
-        # 归属该问题的有效证据（丢弃 D 级）
+        # 归属该问题的有效证据（丢弃 E 低质 / F 无法判断）
         matched = [
             e for e in evidence
             if (e.question_id == qid or (section and e.section == section))
-            and e.source_tier != "D"
+            and e.source_tier not in ("E", "F")
         ]
         coverage[qid] = len(matched)
 

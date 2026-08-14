@@ -14,9 +14,9 @@ excerpt / section / question_id。
 from dataclasses import dataclass, asdict, fields
 from typing import Optional
 
-TIER_LABEL = {"S": "官方信源", "A": "权威信源", "B": "一般信源", "D": "低质信源"}
+TIER_LABEL = {"A": "一手官方", "B": "权威媒体", "C": "行业专业", "D": "一般来源", "E": "低质来源", "F": "无法判断"}
 
-_TIER_RANK = {"S": 4, "A": 3, "B": 2, "D": 1, "": 0}
+_TIER_RANK = {"A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "F": 1, "": 0}
 
 
 @dataclass
@@ -27,7 +27,7 @@ class EvidenceRecord:
     period: Optional[str] = None    # 时间口径
     source_title: str = ""          # 信源标题
     source_url: str = ""            # 信源链接
-    source_tier: str = "B"          # 信源等级 S/A/B/D
+    source_tier: str = "D"          # 信源等级 A-F（A 官方/B 权威/C 行业/D 一般/E 低质/F 无法判断）
     publisher: str = ""             # 发布机构（由域名推断）
     published_at: str = ""          # 发布时间（尽力而为）
     excerpt: str = ""               # 原文摘录

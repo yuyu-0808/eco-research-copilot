@@ -31,11 +31,11 @@ INDUSTRY_FRAMEWORKS = {
             "动力电池", "制造", "工业", "机器人", "充电", "电池",
         ],
         "sections": [
-            {"title": "一、行业概览", "question": "行业市场规模、同比增速、渗透率等基础量", "metrics": ["市场规模", "同比增速", "渗透率"], "min_evidence": 2, "min_tier": "A"},
-            {"title": "二、产业链分析", "question": "产业链上下游结构及关键环节价值分布", "metrics": ["产业链环节", "成本占比", "关键环节格局"], "min_evidence": 2, "min_tier": "B"},
-            {"title": "三、竞争格局", "question": "市场集中度、头部厂商份额与竞争壁垒", "metrics": ["市场集中度", "头部厂商份额", "竞争壁垒"], "min_evidence": 2, "min_tier": "A"},
-            {"title": "四、政策环境", "question": "相关政策、补贴细则与监管趋势", "metrics": ["政策名称", "补贴标准", "监管要求"], "min_evidence": 2, "min_tier": "S"},
-            {"title": "五、趋势研判与投资机会", "question": "行业发展趋势、风险与投资机会", "metrics": ["发展趋势", "风险点", "投资机会"], "min_evidence": 1, "min_tier": "B"},
+            {"title": "一、行业概览", "question": "行业市场规模、同比增速、渗透率等基础量", "metrics": ["市场规模", "同比增速", "渗透率"], "min_evidence": 2, "min_tier": "B"},
+            {"title": "二、产业链分析", "question": "产业链上下游结构及关键环节价值分布", "metrics": ["产业链环节", "成本占比", "关键环节格局"], "min_evidence": 2, "min_tier": "C"},
+            {"title": "三、竞争格局", "question": "市场集中度、头部厂商份额与竞争壁垒", "metrics": ["市场集中度", "头部厂商份额", "竞争壁垒"], "min_evidence": 2, "min_tier": "B"},
+            {"title": "四、政策环境", "question": "相关政策、补贴细则与监管趋势", "metrics": ["政策名称", "补贴标准", "监管要求"], "min_evidence": 2, "min_tier": "A"},
+            {"title": "五、趋势研判与投资机会", "question": "行业发展趋势、风险与投资机会", "metrics": ["发展趋势", "风险点", "投资机会"], "min_evidence": 1, "min_tier": "C"},
         ],
     },
     "tmt": {
@@ -46,11 +46,11 @@ INDUSTRY_FRAMEWORKS = {
             "数字化", "算力",
         ],
         "sections": [
-            {"title": "一、行业概览", "question": "行业市场规模、用户规模、增速", "metrics": ["市场规模", "用户规模", "同比增速"], "min_evidence": 2, "min_tier": "A"},
-            {"title": "二、商业模式与价值链", "question": "商业模式、收入结构、价值链分布", "metrics": ["商业模式", "收入结构", "价值链"], "min_evidence": 2, "min_tier": "B"},
-            {"title": "三、竞争格局", "question": "市场份额、头部玩家、竞争壁垒", "metrics": ["市场份额", "头部玩家", "竞争壁垒"], "min_evidence": 2, "min_tier": "A"},
-            {"title": "四、政策与监管", "question": "监管政策、数据合规、行业规范", "metrics": ["监管政策", "合规要求"], "min_evidence": 2, "min_tier": "S"},
-            {"title": "五、趋势研判与投资机会", "question": "技术趋势、风险与投资机会", "metrics": ["技术趋势", "风险点", "投资机会"], "min_evidence": 1, "min_tier": "B"},
+            {"title": "一、行业概览", "question": "行业市场规模、用户规模、增速", "metrics": ["市场规模", "用户规模", "同比增速"], "min_evidence": 2, "min_tier": "B"},
+            {"title": "二、商业模式与价值链", "question": "商业模式、收入结构、价值链分布", "metrics": ["商业模式", "收入结构", "价值链"], "min_evidence": 2, "min_tier": "C"},
+            {"title": "三、竞争格局", "question": "市场份额、头部玩家、竞争壁垒", "metrics": ["市场份额", "头部玩家", "竞争壁垒"], "min_evidence": 2, "min_tier": "B"},
+            {"title": "四、政策与监管", "question": "监管政策、数据合规、行业规范", "metrics": ["监管政策", "合规要求"], "min_evidence": 2, "min_tier": "A"},
+            {"title": "五、趋势研判与投资机会", "question": "技术趋势、风险与投资机会", "metrics": ["技术趋势", "风险点", "投资机会"], "min_evidence": 1, "min_tier": "C"},
         ],
     },
     "consumer": {
@@ -61,11 +61,11 @@ INDUSTRY_FRAMEWORKS = {
             "化妆品", "品牌",
         ],
         "sections": [
-            {"title": "一、行业概览", "question": "市场规模、增速、渗透率", "metrics": ["市场规模", "同比增速", "渗透率"], "min_evidence": 2, "min_tier": "A"},
-            {"title": "二、需求与消费结构", "question": "需求驱动、消费结构、用户画像", "metrics": ["需求驱动", "消费结构"], "min_evidence": 2, "min_tier": "B"},
-            {"title": "三、竞争格局", "question": "市场集中度、品牌格局、渠道", "metrics": ["市场集中度", "品牌份额", "渠道结构"], "min_evidence": 2, "min_tier": "A"},
-            {"title": "四、政策与宏观环境", "question": "相关政策、宏观环境、监管", "metrics": ["政策", "宏观环境"], "min_evidence": 2, "min_tier": "S"},
-            {"title": "五、趋势研判与投资机会", "question": "消费趋势、风险与投资机会", "metrics": ["消费趋势", "风险点", "投资机会"], "min_evidence": 1, "min_tier": "B"},
+            {"title": "一、行业概览", "question": "市场规模、增速、渗透率", "metrics": ["市场规模", "同比增速", "渗透率"], "min_evidence": 2, "min_tier": "B"},
+            {"title": "二、需求与消费结构", "question": "需求驱动、消费结构、用户画像", "metrics": ["需求驱动", "消费结构"], "min_evidence": 2, "min_tier": "C"},
+            {"title": "三、竞争格局", "question": "市场集中度、品牌格局、渠道", "metrics": ["市场集中度", "品牌份额", "渠道结构"], "min_evidence": 2, "min_tier": "B"},
+            {"title": "四、政策与宏观环境", "question": "相关政策、宏观环境、监管", "metrics": ["政策", "宏观环境"], "min_evidence": 2, "min_tier": "A"},
+            {"title": "五、趋势研判与投资机会", "question": "消费趋势、风险与投资机会", "metrics": ["消费趋势", "风险点", "投资机会"], "min_evidence": 1, "min_tier": "C"},
         ],
     },
 }
@@ -74,11 +74,11 @@ INDUSTRY_FRAMEWORKS = {
 GENERIC_FRAMEWORK = {
     "name": "通用行业研究",
     "sections": [
-        {"title": "一、行业概览", "question": "市场规模、增速、现状", "metrics": ["市场规模", "增速"], "min_evidence": 2, "min_tier": "A"},
-        {"title": "二、产业链 / 价值链分析", "question": "产业链结构、价值分布", "metrics": ["产业链", "价值分布"], "min_evidence": 2, "min_tier": "B"},
-        {"title": "三、竞争格局", "question": "市场份额、竞争壁垒", "metrics": ["市场份额", "竞争壁垒"], "min_evidence": 2, "min_tier": "A"},
-        {"title": "四、政策环境", "question": "政策、监管", "metrics": ["政策", "监管"], "min_evidence": 2, "min_tier": "S"},
-        {"title": "五、趋势研判与投资机会", "question": "趋势、风险、机会", "metrics": ["趋势", "风险", "机会"], "min_evidence": 1, "min_tier": "B"},
+        {"title": "一、行业概览", "question": "市场规模、增速、现状", "metrics": ["市场规模", "增速"], "min_evidence": 2, "min_tier": "B"},
+        {"title": "二、产业链 / 价值链分析", "question": "产业链结构、价值分布", "metrics": ["产业链", "价值分布"], "min_evidence": 2, "min_tier": "C"},
+        {"title": "三、竞争格局", "question": "市场份额、竞争壁垒", "metrics": ["市场份额", "竞争壁垒"], "min_evidence": 2, "min_tier": "B"},
+        {"title": "四、政策环境", "question": "政策、监管", "metrics": ["政策", "监管"], "min_evidence": 2, "min_tier": "A"},
+        {"title": "五、趋势研判与投资机会", "question": "趋势、风险、机会", "metrics": ["趋势", "风险", "机会"], "min_evidence": 1, "min_tier": "C"},
     ],
 }
 

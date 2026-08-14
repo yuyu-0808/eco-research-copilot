@@ -50,6 +50,7 @@ CSS = r"""<style>
   --brand-soft: #ECEFFB;
   --brand-ring: rgba(58,73,196,.18);
   --gold: #B8963E;
+  --gold-soft: rgba(184,150,62,.14);
   --success: #15875A;
   --success-soft: #E7F5EE;
   --warning: #C07E18;
@@ -83,6 +84,7 @@ CSS = r"""<style>
   --brand-soft: rgba(95,108,219,.20);
   --brand-ring: rgba(95,108,219,.35);
   --gold: #C9A85B;
+  --gold-soft: rgba(201,168,91,.18);
   --success: #2EB97E;
   --success-soft: rgba(46,185,126,.18);
   --warning: #E5A43A;
@@ -257,9 +259,12 @@ header[data-testid="stHeader"] { background: transparent !important; }
 .badge.ok { background:var(--success-soft); color:var(--success); }
 .badge.part { background:var(--warning-soft); color:var(--warning); }
 .badge.brand { background:var(--brand-soft); color:var(--brand-ink); }
-.badge-grade-s { background:var(--success-soft); color:var(--success); }
-.badge-grade-a { background:var(--brand-soft); color:var(--brand-ink); }
-.badge-grade-b { background:var(--warning-soft); color:var(--warning); }
+.badge-grade-a { background:var(--success-soft); color:var(--success); }
+.badge-grade-b { background:var(--brand-soft); color:var(--brand-ink); }
+.badge-grade-c { background:var(--gold-soft); color:var(--gold); }
+.badge-grade-d { background:var(--warning-soft); color:var(--warning); }
+.badge-grade-e { background:var(--danger-soft); color:var(--danger); }
+.badge-grade-f { background:var(--surface-2); color:var(--muted); }
 .chip { display:inline-flex; align-items:center; padding:.32rem .72rem; border-radius:999px; border:1px solid var(--border-strong); background:var(--surface); color:var(--text); font-size:12.5px; font-weight:600; margin:.15rem .25rem .15rem 0; }
 
 .report-head { padding:.3rem 0 1rem; border-bottom:1px solid var(--border); margin-bottom:1.1rem; }
@@ -662,7 +667,7 @@ def _render_review_panel(project_id, project_dir, topic, ckpt, state):
         st.markdown(f"已检索并稽核 **{len(ev_list)} 条有效证据**，可按章节审核、剔除无效信源")
         keep_flags = []
         for i, ev in enumerate(ev_list):
-            tier = ev.get("source_tier", "B")
+            tier = ev.get("source_tier", "D")
             claim = (ev.get("claim") or ev.get("excerpt") or "").strip()
             section = ev.get("section") or ""
             publisher = ev.get("publisher") or ""
@@ -1049,9 +1054,9 @@ def render_report():
         )
         conflict_claims = {c.get("claim", "") for c in conflicts}
         for i, ev in enumerate(evidence, 1):
-            tier = ev.get("source_tier", "B")
-            tier_label = {"S": "官方信源", "A": "权威信源", "B": "一般信源", "D": "低质信源"}.get(tier, "未知")
-            grade_cls = {"S": "badge-grade-s", "A": "badge-grade-a", "B": "badge-grade-b", "D": "badge-grade-b"}.get(tier, "badge-grade-b")
+            tier = ev.get("source_tier", "D")
+            tier_label = {"A": "一手官方", "B": "权威媒体", "C": "行业专业", "D": "一般来源", "E": "低质来源", "F": "无法判断"}.get(tier, "未知")
+            grade_cls = {"A": "badge-grade-a", "B": "badge-grade-b", "C": "badge-grade-c", "D": "badge-grade-d", "E": "badge-grade-e", "F": "badge-grade-f"}.get(tier, "badge-grade-f")
             claim = (ev.get("claim") or ev.get("excerpt") or "").strip()
             value = ev.get("value") or ""
             unit = ev.get("unit") or ""
@@ -1095,7 +1100,7 @@ def render_report():
             title = r.get("title", "") or ""
             url = r.get("url", "") or ""
             grade, grade_label = source_grade(url, title)
-            grade_cls = {"S": "badge-grade-s", "A": "badge-grade-a", "B": "badge-grade-b", "D": "badge-grade-b"}.get(grade, "badge-grade-b")
+            grade_cls = {"A": "badge-grade-a", "B": "badge-grade-b", "C": "badge-grade-c", "D": "badge-grade-d", "E": "badge-grade-e", "F": "badge-grade-f"}.get(grade, "badge-grade-f")
             grade_badge = f'<span class="badge {grade_cls}">{grade} · {grade_label}</span>'
             if url:
                 st.markdown(
