@@ -17,6 +17,3 @@ ddgs
 # 文档生成
 python-docx
 requests
-
-# 测试用（PPT 相关单测）
-python-pptx
