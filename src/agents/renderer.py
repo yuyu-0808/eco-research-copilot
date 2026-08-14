@@ -4,7 +4,21 @@ from openai import OpenAI
 from src.utils.config import Config
 from src.utils.logger import AgentLogger
 from src.utils.llm_utils import call_llm
+from src.utils.chart_rules import apply_chart_rules
 from src.tools.docx_writer import DocxWriter
+
+
+def _load_chart_skill_doc() -> str:
+    """加载行研图表规范 skill 文档（skills/chart_spec/SKILL.md），供 prompt 注入。"""
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.join(root, "skills", "chart_spec", "SKILL.md")
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            pass
+    return ""
 
 
 class RendererAgent:
@@ -16,11 +30,15 @@ class RendererAgent:
     def generate_structure(self, topic: str, safe_context: str) -> dict:
         """结构化提炼：标题/摘要/大纲/图表/表格/参考文献（正文撰写前的结构定义）。"""
         self.logger.log_event("结构提炼", "START", "开始结构化提炼（标题/图表/表格/参考文献）")
+        chart_spec = _load_chart_skill_doc()
         prompt = f"""
         你是一位【交付渲染官】，负责研究报告的结构化提炼。
         课题：{topic}
         【已核验的数据与信源】：
         {safe_context}
+
+        【行研图表规范（图表类型必须遵守此规范）】：
+        {chart_spec or "（默认：时间趋势用 line，分类对比用 bar，占比结构用 pie）"}
 
         请完成「结构化提炼」，直接输出纯 JSON（不要代码块标记）：
 
@@ -52,6 +70,8 @@ class RendererAgent:
         }}
         """
         structure = call_llm(self.client, self.model, self.logger, "结构提炼", prompt, need_json=True)
+        # 确定性纠偏：图表类型由规则校验，纠正 LLM 的自由选择
+        structure["charts"] = apply_chart_rules(structure.get("charts", []))
         self.logger.log_event(
             "结构提炼", "SUCCESS",
             f"结构化提炼完成：{len(structure.get('charts', []))} 张图、{len(structure.get('tables', []))} 张表"
