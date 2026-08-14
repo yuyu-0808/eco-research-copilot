@@ -6,12 +6,12 @@
 import os
 import re
 import threading
-import time
 from datetime import datetime
 
 import streamlit as st
 
 from src.utils.config import Config
+from src.utils.checkpoint import Checkpoint, PauseRequested
 from src.orchestrator import ResearchOrchestrator
 from src.ui.helpers import (
     PROJECTS_DIR,
@@ -429,6 +429,8 @@ if "report_data" not in st.session_state:
     st.session_state["report_data"] = None
 if "topic_draft" not in st.session_state:
     st.session_state["topic_draft"] = ""
+if "active_run" not in st.session_state:
+    st.session_state["active_run"] = None
 
 
 PAGE_LABELS = {
@@ -560,7 +562,113 @@ def render_overview():
     st.markdown(compare_html(), unsafe_allow_html=True)
 
 
+def _start_worker(project_id, project_dir, topic, resume=False):
+    """后台启动流水线线程。线程只写 checkpoint 与日志，收尾由前端运行面板检测状态后处理。"""
+    def _work():
+        try:
+            orchestrator = ResearchOrchestrator(project_name=project_id, resume=resume)
+            orchestrator.run(topic)
+        except PauseRequested:
+            pass  # checkpoint 已置 paused，前端接管
+        except Exception:
+            pass  # checkpoint 已置 failed，前端接管
+
+    threading.Thread(target=_work, daemon=True).start()
+
+
+def _show_intermediates(state):
+    """暂停后展示各阶段中间产物（Step1：只读查看）。"""
+    stages = state.get("stages", {})
+    plan_data = (stages.get("plan") or {}).get("data") or {}
+    collect_data = (stages.get("collect") or {}).get("data") or {}
+    analyze_data = (stages.get("analyze") or {}).get("data") or {}
+
+    st.markdown('<div class="sec-title" style="margin-top:.4rem;">中间产物预览</div>', unsafe_allow_html=True)
+    t1, t2, t3 = st.tabs(["① 调研提纲", "② 已校验情报", "③ 分析结果"])
+    with t1:
+        if plan_data:
+            st.json(plan_data)
+        else:
+            st.caption("规划阶段尚未完成，暂无中间产物。")
+    with t2:
+        vc = collect_data.get("verified_context", "")
+        if vc:
+            st.caption(f"质检轮次：第 {collect_data.get('round', '-')} 轮 / 共 {collect_data.get('max_rounds', '-')} 轮")
+            st.text_area("已校验情报（只读）", vc, height=220, disabled=True)
+        else:
+            st.caption("采集质检阶段尚未完成，暂无中间产物。")
+    with t3:
+        if analyze_data:
+            st.json(analyze_data)
+        else:
+            st.caption("分析阶段尚未完成，暂无中间产物。")
+
+
+def _render_run_panel(active):
+    """运行中/暂停中的进度面板：定时轮询 + 暂停/继续交互。"""
+    project_id = active["project_id"]
+    project_dir = active["project_dir"]
+    topic = active["topic"]
+    ckpt = Checkpoint(project_dir)
+
+    @st.fragment(run_every=1.0)
+    def _panel():
+        state = ckpt.load()
+        entries = read_log(project_dir)
+        st.markdown('<div class="sec-title">多智能体流水线</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="color:var(--muted);margin:0 0 .6rem;">课题：{html_escape(topic)}</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            pipeline_html(derive_stages(entries), current_round(entries), entries[-10:]),
+            unsafe_allow_html=True,
+        )
+
+        status = state.get("status", "running")
+        if status == "running":
+            if st.button("⏸️ 暂停调研", key="btn_pause_run"):
+                ckpt.request_pause()
+                st.toast("暂停请求已发送，当前步骤完成后将暂停")
+        elif status == "paused":
+            st.info("⏸️ 调研已暂停，进度已保存。可查看中间产物，或点击继续。")
+            _show_intermediates(state)
+            if st.button("▶️ 继续调研", key="btn_resume_run", type="primary"):
+                ckpt.clear_pause()
+                _start_worker(project_id, project_dir, topic, resume=True)
+                st.toast("已继续，从断点恢复执行")
+        elif status == "completed":
+            plan_data = (state.get("stages", {}).get("plan") or {}).get("data") or {}
+            ai_data = (state.get("stages", {}).get("analyze") or {}).get("data") or {}
+            docx_path = ((state.get("stages", {}).get("format") or {}).get("data") or {}).get("docx_path", "")
+            final_result = {"plan_data": plan_data, "ai_data": ai_data, "docx_path": docx_path}
+            save_result(project_dir, project_id, topic, final_result)
+            st.session_state["active_run"] = None
+            st.session_state["report_data"] = {
+                "plan_data": plan_data,
+                "ai_data": ai_data,
+                "docx_path": docx_path,
+                "project_id": project_id,
+                "topic": topic,
+            }
+            st.session_state["nav_radio"] = PAGE_LABELS.get("report", "报告预览")
+            st.session_state["page"] = "report"
+            st.rerun()
+        elif status == "failed":
+            st.error("调研已中断，可返回项目历史查看日志，或重新发起。")
+            if st.button("← 返回新建调研", key="btn_back_new"):
+                st.session_state["active_run"] = None
+                st.rerun()
+
+    _panel()
+
+
 def render_new():
+    # 若有正在运行/暂停的任务，优先展示进度面板
+    if st.session_state.get("active_run"):
+        _render_run_panel(st.session_state["active_run"])
+        return
+
     st.markdown('<div class="sec-title">新建调研</div>', unsafe_allow_html=True)
     st.markdown(
         '<h2 style="margin:0 0 .3rem;font-size:1.5rem;font-weight:800;color:var(--ink);">发起一次多智能体调研</h2>'
@@ -624,56 +732,14 @@ def render_new():
         project_dir = os.path.join(PROJECTS_DIR, project_id)
         os.makedirs(project_dir, exist_ok=True)
 
-        result_holder = {}
-
-        def _work():
-            try:
-                orchestrator = ResearchOrchestrator(project_name=project_id)
-                result_holder["result"] = orchestrator.run(final_topic)
-                result_holder["error"] = None
-            except Exception as e:  # noqa: BLE001
-                result_holder["error"] = e
-                result_holder["result"] = None
-
-        t = threading.Thread(target=_work, daemon=True)
-        t.start()
-
-        board = st.empty()
-        try:
-            while t.is_alive():
-                entries = read_log(project_dir)
-                st.markdown(
-                    pipeline_html(derive_stages(entries), current_round(entries), entries[-10:]),
-                    unsafe_allow_html=True,
-                )
-                time.sleep(0.7)
-            t.join()
-        except BaseException:
-            pass
-
-        entries = read_log(project_dir)
-        st.markdown(
-            pipeline_html(derive_stages(entries), current_round(entries), entries[-10:]),
-            unsafe_allow_html=True,
-        )
-
-        if result_holder.get("error") is not None:
-            st.error(f"调研中断：{result_holder['error']}")
-            return
-
-        final_result = result_holder.get("result")
-        if not final_result:
-            st.error("未获取到调研结果。")
-            return
-
-        save_result(project_dir, project_id, final_topic, final_result)
-        set_report({
-            "plan_data": final_result.get("plan_data", {}),
-            "ai_data": final_result.get("ai_data", {}),
-            "docx_path": final_result.get("docx_path", ""),
+        # 后台启动流水线，进度由运行面板（fragment）轮询展示
+        _start_worker(project_id, project_dir, final_topic, resume=False)
+        st.session_state["active_run"] = {
             "project_id": project_id,
+            "project_dir": project_dir,
             "topic": final_topic,
-        })
+        }
+        st.rerun()
 
 
 _SOURCE_S = ["gov", "edu", "oecd", "un.org", "worldbank", "imf.org", "who.int", ".ac.cn", "stats", "mofcom", "ndrc", "nea.gov", "miit"]

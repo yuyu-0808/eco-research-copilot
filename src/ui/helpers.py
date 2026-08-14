@@ -7,6 +7,8 @@ import os
 import re
 from datetime import datetime
 
+from src.utils.checkpoint import Checkpoint
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PROJECTS_DIR = os.path.join(ROOT_DIR, "projects")
 
@@ -112,6 +114,14 @@ def load_result(project_dir):
     return None
 
 
+def load_checkpoint(project_dir):
+    """加载项目 checkpoint.json；不存在则返回 None。"""
+    ck = Checkpoint(project_dir)
+    if not ck.exists():
+        return None
+    return ck.load()
+
+
 def save_result(project_dir, project_id, topic, final_result):
     """把一次完整调研结果持久化为 result.json，供历史回看。"""
     os.makedirs(project_dir, exist_ok=True)
@@ -159,6 +169,19 @@ def list_projects():
         passed_qa = any("数据质量达标" in (e.get("details") or "") for e in entries)
 
         completed = bool(result) or os.path.exists(docx)
+
+        # 断点续跑识别：有 checkpoint 且存在已完成阶段、但整体未完成 → 可续跑
+        ck_state = load_checkpoint(d)
+        ck_status = None
+        resumable = False
+        if ck_state:
+            ck_status = ck_state.get("status")
+            if not completed and any(
+                (ck_state.get("stages", {}).get(s) or {}).get("status") == "done"
+                for s in ("plan", "collect", "analyze", "format")
+            ):
+                resumable = True
+
         projects.append({
             "id": name,
             "topic": topic,
@@ -173,6 +196,8 @@ def list_projects():
             "relative_time": _relative_time(name[len("Project_"):] if name.startswith("Project_") else ""),
             "passed_qa": passed_qa,
             "dir": d,
+            "resumable": resumable,
+            "checkpoint_status": ck_status,
         })
     projects.sort(key=lambda p: p["id"], reverse=True)
     return projects
