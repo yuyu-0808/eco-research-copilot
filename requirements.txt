@@ -12,7 +12,7 @@ openai
 
 # 搜索工具（可切换 tavily / duckduckgo）
 tavily-python
-duckduckgo-search
+ddgs
 
 # 文档生成
 python-docx

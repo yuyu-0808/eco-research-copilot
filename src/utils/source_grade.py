@@ -23,7 +23,8 @@ _SOURCE_A = [
 
 # D 级：低质 / 内容农场域名（保守，只放明确低质）
 _SOURCE_D = [
-    "360doc", "wenzhang", "jingyan.baidu", "zhidao.baidu",
+    "360doc", "wenzhang", "jingyan.baidu", "zhidao.baidu", "wenku.baidu",
+    "sohu.com/a", "k.sina", "zhihu.com/question", "tianya", "19lou",
 ]
 
 # D 级：营销号标题特征词（震惊体）

@@ -1,7 +1,18 @@
 import os
+import re
+from urllib.parse import urlparse, parse_qs, unquote
+
 from tavily import TavilyClient
-from duckduckgo_search import DDGS
 from src.utils.config import Config
+
+
+def _import_ddgs():
+    """兼容导入 DDG 库：优先新库 ddgs，回落旧库 duckduckgo_search。"""
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        from duckduckgo_search import DDGS
+    return DDGS
 
 
 class WebSearcher:
@@ -51,23 +62,79 @@ class WebSearcher:
         except Exception:
             return []
 
+    # ------------------------------------------------------------------
+    # DuckDuckGo：双通道（库优先，HTML 接口兜底）
+    # ------------------------------------------------------------------
     def _ddg_search(self, query: str, max_results: int) -> list:
+        # 通道 1：ddgs / duckduckgo-search 库
         try:
-            # 可选代理：仅国内网络使用 DDG 时，在 .env 配置 DDG_PROXY
-            proxy = os.getenv("DDG_PROXY", "")
-            if proxy:
-                os.environ["HTTP_PROXY"] = proxy
-                os.environ["HTTPS_PROXY"] = proxy
+            return self._ddg_library(query, max_results)
+        except Exception:
+            pass
+        # 通道 2：DDG 纯 HTML 接口兜底
+        try:
+            return self._ddg_html(query, max_results)
+        except Exception:
+            pass
+        return []
 
-            results = DDGS().text(query, max_results=max_results)
+    def _ddg_library(self, query: str, max_results: int) -> list:
+        DDGS = _import_ddgs()
+        proxy = os.getenv("DDG_PROXY", "")
+        if proxy:
+            os.environ["HTTP_PROXY"] = proxy
+            os.environ["HTTPS_PROXY"] = proxy
 
+        results = []
+        try:
+            with DDGS() as ddgs:
+                for r in ddgs.text(query, max_results=max_results):
+                    results.append({
+                        "title": r.get("title", ""),
+                        "url": r.get("href") or r.get("url") or "",
+                        "snippet": r.get("body", ""),
+                    })
+        finally:
             if proxy:
                 os.environ.pop("HTTP_PROXY", None)
                 os.environ.pop("HTTPS_PROXY", None)
+        return results
 
-            return [
-                {"title": r.get("title", ""), "url": r.get("href") or r.get("url") or "", "snippet": r.get("body", "")}
-                for r in results
-            ]
+    def _ddg_html(self, query: str, max_results: int) -> list:
+        """DDG 纯 HTML 接口兜底：直接抓 html.duckduckgo.com，正则解析结果。"""
+        import requests
+
+        proxy = os.getenv("DDG_PROXY", "")
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+        resp = requests.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
+            headers={"User-Agent": "Mozilla/5.0 (research-agent)"},
+            proxies=proxies,
+            timeout=15,
+        )
+        resp.raise_for_status()
+
+        results = []
+        for m in re.finditer(r'class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>', resp.text):
+            href = m.group(1)
+            title = re.sub(r"<[^>]+>", "", m.group(2)).strip()
+            results.append({
+                "title": title,
+                "url": self._decode_ddg_url(href),
+                "snippet": "",
+            })
+            if len(results) >= max_results:
+                break
+        return results
+
+    @staticmethod
+    def _decode_ddg_url(href: str) -> str:
+        """把 DDG 的 //duckduckgo.com/l/?uddg=<url> 跳转链接解码成真实 URL。"""
+        try:
+            if "uddg=" in href:
+                full = href if href.startswith("http") else "https:" + href
+                return unquote(parse_qs(urlparse(full).query).get("uddg", [href])[0])
         except Exception:
-            return []
+            pass
+        return href
