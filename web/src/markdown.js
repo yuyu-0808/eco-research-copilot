@@ -28,7 +28,13 @@ export function extractHeadings(md) {
 // Markdown 渲染为 HTML（用于报告正文）
 export function renderMarkdown(md) {
   if (!md) return ''
-  return marked.parse(md)
+  let html = marked.parse(md)
+  // 引用标号 [n] → 可点击的信源引用（配合溯源面板）
+  html = html.replace(/\[(\d+)\]/g, '<span class="ref-cite" data-ref="$1">[$1]</span>')
+  // 标题加锚点 id（配合左侧悬浮目录导航）
+  let hIdx = 0
+  html = html.replace(/<h([23])>/g, (m, level) => `<h${level} id="sec-${hIdx++}">`)
+  return html
 }
 
 // 表格 dict → HTML（对齐后端 table_to_html）

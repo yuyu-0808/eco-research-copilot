@@ -28,7 +28,7 @@ export function chartToOption(chart) {
           center: ['40%', '50%'],
           data: labels.map((l, i) => ({ name: l, value: data[i] ?? 0 })),
           color: PALETTE,
-          label: { color: '#747C92', fontSize: 12 },
+          label: { color: '#747C92', fontSize: 12, formatter: '{b} {d}%' },
         },
       ],
     }
@@ -42,7 +42,7 @@ export function chartToOption(chart) {
       ...base,
       xAxis: catAxis,
       yAxis: valAxis,
-      series: [{ type: 'bar', data, itemStyle: { color: BRAND, borderRadius: [6, 6, 0, 0] } }],
+      series: [{ type: 'bar', data, itemStyle: { color: BRAND, borderRadius: [6, 6, 0, 0] }, label: { show: true, position: 'top', color: '#747C92', fontSize: 11 } }],
     }
   }
   if (ctype === 'area') {
@@ -70,6 +70,7 @@ export function chartToOption(chart) {
         type: 'line', data, smooth: true,
         lineStyle: { color: BRAND, width: 2.5 },
         itemStyle: { color: BRAND },
+        label: { show: true, position: 'top', color: '#747C92', fontSize: 11 },
       },
     ],
   }

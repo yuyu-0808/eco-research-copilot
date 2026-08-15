@@ -48,7 +48,7 @@ export default function Report({ id }) {
         setLogs((prev) => [...prev, ...(msg.new_logs || [])])
         if (msg.status === 'completed' || msg.status === 'failed') {
           ws.close()
-          load() // 拉取完整结果
+          load()
         }
       })
       setWs(ws)
@@ -70,17 +70,18 @@ export default function Report({ id }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1rem' }}>
-        <div style={{ flex: 1 }}>
-          <div className="report-title" style={{ fontSize: 20 }}>
+      {/* 顶部悬浮操作栏 */}
+      <div className="report-toolbar">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="report-title" style={{ fontSize: 18 }}>
             {ck.topic || result?.topic || '调研课题'}
           </div>
-          <div className="muted" style={{ fontSize: 13 }}>项目 {id}</div>
+          <div className="muted" style={{ fontSize: 12 }}>项目 {id}</div>
         </div>
         {result && !running && (
           <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
             {result.docx_path && (
-              <a className="btn" href={`/api/projects/${id}/export/docx?token=${encodeURIComponent(getToken())}`} download>导出 Word</a>
+              <a className="btn primary" href={`/api/projects/${id}/export/docx?token=${encodeURIComponent(getToken())}`} download>导出 Word</a>
             )}
             <a className="btn" href={`/api/projects/${id}/export/pdf?token=${encodeURIComponent(getToken())}`} download>导出 PDF</a>
             <a className="btn" href={`/api/projects/${id}/export/markdown?token=${encodeURIComponent(getToken())}`} download>导出 Markdown</a>
@@ -113,7 +114,6 @@ export default function Report({ id }) {
 
 function RunningPanel({ detail, logs, onPause, onResume, onReset, onStop }) {
   const ck = detail.checkpoint || {}
-  // 阶段状态：优先用 checkpoint 里已完成的阶段推导，日志兜底
   const stages = deriveStages(ck)
   const doneCount = stages.filter((s) => s === 'done').length
   const progress = Math.round((doneCount / stages.length) * 100)
@@ -122,7 +122,6 @@ function RunningPanel({ detail, logs, onPause, onResume, onReset, onStop }) {
       <div className="sec-title">多智能体流水线</div>
       <div className="card">
         <Pipeline stages={stages} />
-        {/* 百分比进度条 */}
         <div style={{ marginTop: '0.8rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginBottom: '0.3rem' }}>
             <span>总进度</span>
@@ -179,107 +178,159 @@ function ReportBody({ result }) {
 
   const headings = extractHeadings(md)
   const conflictClaims = new Set((conflicts || []).map((c) => c.claim))
+  const [activeRef, setActiveRef] = useState(null)
+  const bodyRef = useRef(null)
+
+  // 给 ## 标题加锚点 id（与左侧目录一一对应）
+  let hCounter = 0
+  const anchoredMd = md.replace(/^##\s+(.+)$/gm, (m, text) => `## <a id="sec-${hCounter++}"></a>${text}`)
+
+  // 引用标号点击 → 弹出信源详情
+  useEffect(() => {
+    const el = bodyRef.current
+    if (!el) return
+    const onClick = (e) => {
+      const cite = e.target.closest('.ref-cite')
+      if (!cite) return
+      const n = parseInt(cite.dataset.ref, 10)
+      const ref = refs[n - 1]
+      setActiveRef(ref ? { n, ref } : null)
+    }
+    el.addEventListener('click', onClick)
+    return () => el.removeEventListener('click', onClick)
+  }, [refs])
+
+  const scrollTo = (i) => {
+    document.getElementById(`sec-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
-    <div>
-      <div className="report-head">
-        <div className="report-title">{title}</div>
-        <div className="report-meta">
-          发布日期：{ai.publish_date || '—'} · 研究引擎：Eco-Research Copilot
-        </div>
-      </div>
-
-      {core && (
-        <div className="abstract">
-          <div className="ab-label">摘要 · Core Insights</div>
-          <div className="ab-text">{core}</div>
-        </div>
-      )}
-
+    <div className="report-layout">
       {headings.length > 0 && (
-        <div className="toc">
-          {headings.map((h, i) => <span key={i} className="toc-item">{h}</span>)}
-        </div>
+        <aside className="report-nav">
+          <div className="report-nav-title">目录</div>
+          {headings.map((h, i) => (
+            <div key={i} className="report-nav-item" onClick={() => scrollTo(i)}>{h}</div>
+          ))}
+        </aside>
       )}
 
-      <QAPanel checks={checks} warnings={warnings} conflicts={conflicts} />
+      <div className="report-content">
+        <div className="report-head">
+          <div className="report-title">{title}</div>
+          <div className="report-meta">
+            发布日期：{ai.publish_date || '—'} · 研究引擎：Eco-Research Copilot
+          </div>
+        </div>
 
-      <div className="sec-title">正文</div>
-      <div className="card report-body">
-        {splitReport(md).map((part, i) => {
-          if (part.kind === 'CHART') {
-            const idx = part.index - 1
-            const chart = charts[idx]
-            const opt = chart ? chartToOption(chart) : null
-            if (!chart) return null
-            return (
-              <div className="chart-box" key={`c${i}`}>
-                {chart.title && <div className="chart-title">{chart.title}</div>}
-                {opt ? <Chart option={opt} /> : <div className="muted">（图表数据缺失）</div>}
-              </div>
-            )
-          }
-          if (part.kind === 'TABLE') {
-            const idx = part.index - 1
-            const table = tables[idx]
-            if (!table) return null
-            return (
-              <div key={`t${i}`}>
-                {table.title && <div className="chart-title">{table.title}</div>}
-                <div dangerouslySetInnerHTML={{ __html: tableToHtml(table) }} />
-              </div>
-            )
-          }
-          return <div key={`x${i}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(part.text) }} />
-        })}
+        {core && (
+          <div className="abstract">
+            <div className="ab-label">摘要 · Core Insights</div>
+            <div className="ab-text">{core}</div>
+          </div>
+        )}
+
+        <QAPanel checks={checks} warnings={warnings} conflicts={conflicts} />
+
+        <div className="sec-title">正文</div>
+        <div className="card report-body" ref={bodyRef}>
+          {splitReport(anchoredMd).map((part, i) => {
+            if (part.kind === 'CHART') {
+              const idx = part.index - 1
+              const chart = charts[idx]
+              const opt = chart ? chartToOption(chart) : null
+              if (!chart) return null
+              return (
+                <div className="chart-box" key={`c${i}`}>
+                  {chart.title && <div className="chart-title">{chart.title}</div>}
+                  {opt ? <Chart option={opt} /> : <div className="muted">（图表数据缺失）</div>}
+                </div>
+              )
+            }
+            if (part.kind === 'TABLE') {
+              const idx = part.index - 1
+              const table = tables[idx]
+              if (!table) return null
+              return (
+                <div key={`t${i}`}>
+                  {table.title && <div className="chart-title">{table.title}</div>}
+                  <div dangerouslySetInnerHTML={{ __html: tableToHtml(table) }} />
+                </div>
+              )
+            }
+            return <div key={`x${i}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(part.text) }} />
+          })}
+        </div>
+
+        {refs.length > 0 && (
+          <>
+            <div className="sec-title">参考文献</div>
+            <div className="card">
+              <ol style={{ margin: 0, paddingLeft: '1.3rem', lineHeight: 1.9, fontSize: 13.5 }}>
+                {refs.map((r, i) => (
+                  <li key={i}>
+                    {r.title}
+                    {r.url ? <> — <a href={r.url} target="_blank" rel="noreferrer">{r.url}</a></> : null}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </>
+        )}
+
+        {evidence.length > 0 && (
+          <>
+            <div className="sec-title">证据溯源 · Evidence Trail</div>
+            <div className="muted" style={{ fontSize: 13, marginBottom: '0.6rem' }}>每条结论绑定信源等级 / 机构 / 原文摘录 / 链接，可逐条核查。</div>
+            {evidence.map((ev, i) => {
+              const claim = (ev.claim || ev.excerpt || '').trim()
+              const isConflict = claim && conflictClaims.has(claim)
+              return (
+                <div key={i} className={`ev-row ${isConflict ? 'conflict' : ''}`}>
+                  <div className="ev-head">
+                    <b>{i + 1}.</b>
+                    <span className="ev-claim">{claim || '（无主张）'}</span>
+                    <TierBadge tier={ev.source_tier} />
+                    {isConflict && <span className="badge danger">数据矛盾，请人工核实</span>}
+                  </div>
+                  <div className="ev-meta">
+                    {ev.publisher || '未知机构'}
+                    {ev.value ? ` · ${ev.value}${ev.unit || ''}` : ''}
+                    {ev.period ? ` · ${ev.period}` : ''}
+                    {ev.section ? ` · ${ev.section}` : ''}
+                    {ev.source_url ? <> · <a href={ev.source_url} target="_blank" rel="noreferrer">{ev.source_title || '来源链接'}</a></> : ''}
+                  </div>
+                  {ev.excerpt && <div className="ev-excerpt">{ev.excerpt}</div>}
+                </div>
+              )
+            })}
+          </>
+        )}
+
+        <TracePanel trace={trace} />
       </div>
 
-      {refs.length > 0 && (
-        <>
-          <div className="sec-title">参考文献</div>
-          <div className="card">
-            <ol style={{ margin: 0, paddingLeft: '1.3rem', lineHeight: 1.9, fontSize: 13.5 }}>
-              {refs.map((r, i) => (
-                <li key={i}>
-                  {r.title}
-                  {r.url ? <> — <a href={r.url} target="_blank" rel="noreferrer">{r.url}</a></> : null}
-                </li>
-              ))}
-            </ol>
-          </div>
-        </>
-      )}
+      {/* 引用溯源浮层 */}
+      {activeRef && <RefPopover data={activeRef} onClose={() => setActiveRef(null)} />}
+    </div>
+  )
+}
 
-      {evidence.length > 0 && (
-        <>
-          <div className="sec-title">证据溯源 · Evidence Trail</div>
-          <div className="muted" style={{ fontSize: 13, marginBottom: '0.6rem' }}>每条结论绑定信源等级 / 机构 / 原文摘录 / 链接，可逐条核查。</div>
-          {evidence.map((ev, i) => {
-            const claim = (ev.claim || ev.excerpt || '').trim()
-            const isConflict = claim && conflictClaims.has(claim)
-            return (
-              <div key={i} className={`ev-row ${isConflict ? 'conflict' : ''}`}>
-                <div className="ev-head">
-                  <b>{i + 1}.</b>
-                  <span className="ev-claim">{claim || '（无主张）'}</span>
-                  <TierBadge tier={ev.source_tier} />
-                  {isConflict && <span className="badge danger">数据矛盾，请人工核实</span>}
-                </div>
-                <div className="ev-meta">
-                  {ev.publisher || '未知机构'}
-                  {ev.value ? ` · ${ev.value}${ev.unit || ''}` : ''}
-                  {ev.period ? ` · ${ev.period}` : ''}
-                  {ev.section ? ` · ${ev.section}` : ''}
-                  {ev.source_url ? <> · <a href={ev.source_url} target="_blank" rel="noreferrer">{ev.source_title || '来源链接'}</a></> : ''}
-                </div>
-                {ev.excerpt && <div className="ev-excerpt">{ev.excerpt}</div>}
-              </div>
-            )
-          })}
-        </>
-      )}
-
-      <TracePanel trace={trace} />
+// 引用溯源浮层：点击正文 [n] 后弹出对应信源详情
+function RefPopover({ data, onClose }) {
+  const { n, ref } = data
+  return (
+    <div className="ref-popover-mask" onClick={onClose}>
+      <div className="ref-popover" onClick={(e) => e.stopPropagation()}>
+        <div className="ref-popover-head">
+          <span className="badge brand">信源 [{n}]</span>
+          <button className="btn" style={{ padding: '0.1rem 0.5rem', fontSize: 12, marginLeft: 'auto' }} onClick={onClose}>✕</button>
+        </div>
+        <div className="ref-popover-title">{ref.title || '（未署名）'}</div>
+        {ref.url && (
+          <a className="ref-popover-url" href={ref.url} target="_blank" rel="noreferrer">{ref.url}</a>
+        )}
+      </div>
     </div>
   )
 }
@@ -296,7 +347,6 @@ function fmtNum(v) {
   return String(v)
 }
 
-// 把 checks（分规则）或 warnings（扁平）整理成按规则分组的列表
 function buildGroups(checks, warnings) {
   const groups = []
   const push = (key, items) => {
@@ -304,12 +354,10 @@ function buildGroups(checks, warnings) {
   }
   if (checks && Object.keys(checks).length > 0) {
     RULE_ORDER.forEach((key) => push(key, checks[key]))
-    // 插件化新增的自定义规则（不在固定顺序里）追加在后
     Object.keys(checks).forEach((key) => {
       if (!RULE_ORDER.includes(key)) push(key, checks[key])
     })
   } else if (warnings && warnings.length > 0) {
-    // 旧结果 fallback：按 rule 字段分组
     const byRule = {}
     warnings.forEach((w) => { (byRule[w.rule || 'unknown'] = byRule[w.rule || 'unknown'] || []).push(w) })
     Object.entries(byRule).forEach(([key, items]) => push(key, items))
@@ -317,7 +365,6 @@ function buildGroups(checks, warnings) {
   return groups
 }
 
-// 提取需标红的关键数值（按规则差异）
 function DetailExtra({ issue }) {
   const d = issue.detail || {}
   switch (issue.rule) {
@@ -367,7 +414,6 @@ function QAPanel({ checks, warnings, conflicts }) {
   const verifyCount = allIssues.filter((i) => i.level === 'verify').length
   const conflictCount = (conflicts || []).length
 
-  // 全部通过：绿色通过卡片
   if (allIssues.length === 0 && conflictCount === 0) {
     return (
       <div className="card" style={{ borderColor: 'var(--success)', marginBottom: '1rem' }}>

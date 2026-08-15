@@ -33,7 +33,14 @@ export default function Dashboard({ go }) {
   const [data, setData] = useState(null)
   const [stats, setStats] = useState(null)
   const [err, setErr] = useState('')
+  const [toast, setToast] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+
+  function notify(msg) {
+    setToast(msg)
+    window.clearTimeout(notify._t)
+    notify._t = window.setTimeout(() => setToast(''), 2400)
+  }
 
   function load() {
     apiGet(`/api/projects${showArchived ? '?include_archived=1' : ''}`)
@@ -45,10 +52,11 @@ export default function Dashboard({ go }) {
     apiGet('/api/stats').then(setStats).catch(() => {})
   }, [showArchived])
 
-  async function act(path, body) {
+  async function act(path, body, successMsg) {
     try {
       await apiPost(path, body)
       load()
+      if (successMsg) notify(successMsg)
     } catch (e) {
       setErr(e.message)
     }
@@ -76,6 +84,7 @@ export default function Dashboard({ go }) {
     try {
       await apiDelete(`/api/projects/${p.id}`)
       load()
+      notify('项目已删除')
     } catch (e) {
       setErr(e.message)
     }
@@ -90,6 +99,7 @@ export default function Dashboard({ go }) {
 
   return (
     <div>
+      {toast && <div className="toast">✓ {toast}</div>}
       <div className="sec-title">工作台 · 概览</div>
       <div className="kpi-groups">
         <KpiGroup title="产出" items={[
@@ -115,7 +125,16 @@ export default function Dashboard({ go }) {
       </div>
 
       {projects.length === 0 ? (
-        <div className="empty">{showArchived ? '没有归档项目。' : '还没有项目，点左侧「新建调研」开始第一个课题。'}</div>
+        <div className="card empty-hero">
+          <div className="empty-emoji">{showArchived ? '🗂️' : '🚀'}</div>
+          <div className="empty-title">{showArchived ? '没有归档项目' : '开始你的第一份深度报告'}</div>
+          <div className="empty-desc">
+            {showArchived ? '归档的项目会显示在这里。' : '输入一个课题，多智能体会自动完成检索、验证、分析与报告撰写。'}
+          </div>
+          {!showArchived && (
+            <button className="btn primary" onClick={() => go('/new')}>＋ 新建调研</button>
+          )}
+        </div>
       ) : (
         <div className="proj-list">
           {projects.map((p) => (

@@ -43,6 +43,15 @@ _SECRET_FIELDS = [
 ]
 
 
+def _mask(key: str) -> str:
+    """密钥脱敏：保留前 4 位 + 后 4 位，中间打码。"""
+    if not key:
+        return ''
+    if len(key) <= 8:
+        return '****'
+    return f"{key[:4]}****{key[-4:]}"
+
+
 @router.get("")
 def get_settings():
     return ok({
@@ -50,7 +59,9 @@ def get_settings():
         "backup_model": Config.BACKUP_MODEL,
         "base_url": Config.BASE_URL,
         "deepseek_api_key_set": bool(Config.DEEPSEEK_API_KEY),
+        "deepseek_api_key_masked": _mask(Config.DEEPSEEK_API_KEY),
         "tavily_api_key_set": bool(Config.TAVILY_API_KEY),
+        "tavily_api_key_masked": _mask(Config.TAVILY_API_KEY),
         "search_provider": Config.SEARCH_PROVIDER,
         "max_collect_rounds": Config.MAX_COLLECT_ROUNDS,
         "write_audit_rounds": Config.WRITE_AUDIT_ROUNDS,
@@ -92,4 +103,35 @@ def update_settings(payload: dict = None):
 
     if not updated:
         raise HTTPException(400, "没有可更新的字段")
+    return ok({"updated": updated})
+
+
+# 非密钥配置的默认值（与 src/utils/config.py 的代码默认保持一致；重置时写回）
+_DEFAULTS = {
+    "MODEL_NAME": "deepseek-chat",
+    "BACKUP_MODEL": "",
+    "BASE_URL": "https://api.deepseek.com",
+    "SEARCH_PROVIDER": "tavily",
+    "MAX_COLLECT_ROUNDS": "3",
+    "WRITE_AUDIT_ROUNDS": "2",
+    "REQUIRE_STRICT_EVIDENCE": "True",
+    "REPORT_MODE": "standard",
+    "REPORT_FORMAT": "docx",
+    "STAGE_RETRY": "2",
+    "REVIEW_MODE": "auto",
+    "REPORT_DISCLAIMER": "",
+    "REPORT_HEADER": "",
+    "REPORT_FOOTER": "",
+    "REPORT_LOGO": "",
+}
+
+
+@router.post("/reset")
+def reset_settings():
+    """重置所有非密钥配置到默认值（写回 .env + 内存即时生效）。"""
+    updated = []
+    for attr, val in _DEFAULTS.items():
+        set_key(_ENV_PATH, attr, val)
+        setattr(Config, attr, val)
+        updated.append(attr)
     return ok({"updated": updated})

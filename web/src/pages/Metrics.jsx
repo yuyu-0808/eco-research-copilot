@@ -27,6 +27,7 @@ export default function Metrics() {
   const [industry, setIndustry] = useState('')
   const [year, setYear] = useState('')
   const [metricFilter, setMetricFilter] = useState('')
+  const [keyword, setKeyword] = useState('')
   const [err, setErr] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -70,7 +71,15 @@ export default function Metrics() {
   if (err) return <div className="card">加载失败：{err}</div>
   if (!data) return <div className="empty"><span className="spin" /> 加载中…</div>
 
-  const rows = data.metrics || []
+  const allRows = data.metrics || []
+  const kw = keyword.trim().toLowerCase()
+  const rows = kw
+    ? allRows.filter((r) => {
+        const hay = [r.metric_label, METRIC_LABEL[r.metric], r.metric, r.source_title, r.publisher, r.framework_key, r.value]
+          .filter(Boolean).join(' ').toLowerCase()
+        return hay.includes(kw)
+      })
+    : allRows
   const years = [...new Set(rows.map((r) => r.year).filter(Boolean))].sort((a, b) => a - b)
   const exportQs = new URLSearchParams()
   if (industry) exportQs.set('framework_key', industry)
@@ -96,6 +105,12 @@ export default function Metrics() {
 
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            style={{ minWidth: 220, flex: 1 }}
+            placeholder="🔍 搜索指标 / 来源 / 机构…"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+          />
           <label style={{ fontSize: 13, fontWeight: 700 }}>筛选</label>
           <select value={industry} onChange={(e) => { setIndustry(e.target.value); setTrend(null) }}>
             <option value="">全部行业</option>
@@ -110,7 +125,7 @@ export default function Metrics() {
             {METRIC_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
           <span className="muted" style={{ fontSize: 13 }}>
-            共 {data.count} 条沉淀指标 · 每次报告生成后自动沉淀，越用越准
+            共 {rows.length} 条沉淀指标 · 每次报告生成后自动沉淀，越用越准
           </span>
         </div>
       </div>
@@ -136,7 +151,7 @@ export default function Metrics() {
       )}
 
       {rows.length === 0 ? (
-        <div className="empty">暂无沉淀指标。跑一次调研后通过校验的核心指标会自动沉淀，也可点「手动录入」补充。</div>
+        <EmptyMetrics hasFilter={!!(keyword || industry || year || metricFilter)} />
       ) : (
         <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
           <table className="report-table" style={{ margin: 0 }}>
@@ -272,6 +287,46 @@ function MetricForm({ frameworks, editing, onClose, onSaved }) {
         </button>
         {msg && <span style={{ color: 'var(--danger)', fontSize: 13 }}>{msg}</span>}
       </div>
+    </div>
+  )
+}
+
+function EmptyMetrics({ hasFilter }) {
+  const SAMPLE = [
+    { metric: '市场规模', value: '1.2 万亿元', period: '2024年', tier: 'B', src: '高工产业研究院' },
+    { metric: '渗透率', value: '15%', period: '2024年', tier: 'A', src: '泰国陆路运输厅' },
+    { metric: '出货量', value: '257 GWh', period: '2024年', tier: 'B', src: 'EVTank' },
+  ]
+  return (
+    <div className="card" style={{ textAlign: 'center', padding: '2.5rem 1.5rem' }}>
+      <div style={{ fontSize: 40, marginBottom: '0.8rem' }}>📊</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', marginBottom: '0.4rem' }}>
+        {hasFilter ? '没有匹配的指标' : '指标库还是空的'}
+      </div>
+      <div className="muted" style={{ fontSize: 13, maxWidth: 460, margin: '0 auto 1.2rem', lineHeight: 1.7 }}>
+        {hasFilter
+          ? '换个关键词，或清空搜索 / 筛选条件再试。'
+          : '每次调研报告生成后，通过校验的核心数据会自动沉淀到这里，形成可复用的数据飞轮，让后续调研越用越准。'}
+      </div>
+      {!hasFilter && (
+        <>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginBottom: '0.5rem' }}>沉淀后长这样（示例）</div>
+          <div className="card" style={{ padding: 0, overflowX: 'auto', maxWidth: 560, margin: '0 auto' }}>
+            <table className="report-table" style={{ margin: 0 }}>
+              <thead><tr><th>指标</th><th>数值</th><th>时间</th><th>信源</th><th>来源</th></tr></thead>
+              <tbody>
+                {SAMPLE.map((s, i) => (
+                  <tr key={i}>
+                    <td>{s.metric}</td><td>{s.value}</td><td>{s.period}</td>
+                    <td><span className={`badge badge-grade-${s.tier.toLowerCase()}`}>{s.tier}</span></td>
+                    <td>{s.src}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   )
 }
