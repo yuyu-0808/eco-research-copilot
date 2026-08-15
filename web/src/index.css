@@ -226,6 +226,13 @@ a { color: var(--brand); text-decoration: none; }
 .warn-item:last-child { border-bottom: none; }
 .warn-item.verify { color: var(--gold); }
 
+/* ---------- 质检报告 ---------- */
+.qa-summary { display: flex; gap: 0.5rem; flex-wrap: wrap; padding-bottom: 0.6rem; margin-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+.qa-group { margin-top: 0.7rem; }
+.qa-group-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 0.3rem; }
+.num { font-weight: 700; font-variant-numeric: tabular-nums; }
+.num.danger { color: var(--danger); background: var(--danger-soft); padding: 0 0.3rem; border-radius: 4px; }
+
 /* ---------- 表单 ---------- */
 .field { margin-bottom: 1rem; }
 .field label { display: block; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 0.4rem; }

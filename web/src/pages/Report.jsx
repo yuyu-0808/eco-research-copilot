@@ -10,7 +10,17 @@ const RULE_LABEL = {
   industry_range: '行业区间',
   time_series: '时间序列',
   multi_source_deviation: '多源偏差',
+  historical_cross: '历史交叉验证',
 }
+
+// 质检报告规则的固定展示顺序（其余自定义规则追加在后）
+const RULE_ORDER = [
+  'financial_reconciliation',
+  'industry_range',
+  'time_series',
+  'multi_source_deviation',
+  'historical_cross',
+]
 
 export default function Report({ id }) {
   const [detail, setDetail] = useState(null)
@@ -130,6 +140,7 @@ function ReportBody({ result }) {
   const evidence = result.evidence || []
   const conflicts = result.conflicts || []
   const warnings = result.warnings || []
+  const checks = result.checks || {}
   const trace = result.trace || {}
 
   const headings = extractHeadings(md)
@@ -157,7 +168,7 @@ function ReportBody({ result }) {
         </div>
       )}
 
-      {warnings.length > 0 && <WarningsPanel warnings={warnings} />}
+      <QAPanel checks={checks} warnings={warnings} conflicts={conflicts} />
 
       <div className="sec-title">正文</div>
       <div className="card report-body">
@@ -239,23 +250,142 @@ function ReportBody({ result }) {
   )
 }
 
-function WarningsPanel({ warnings }) {
-  return (
-    <div className="card" style={{ borderColor: 'var(--gold)', marginBottom: '1rem' }}>
-      <div className="sec-title" style={{ margin: '0 0 0.4rem' }}>
-        🔎 投研校验预警 · {warnings.length} 项（供采信决策，不阻断）
-      </div>
-      {warnings.map((w, i) => (
-        <div key={i} className={`warn-item ${w.level === 'verify' ? 'verify' : ''}`}>
-          {w.level === 'verify' ? '🔍 待核实' : '⚠ 预警'}【{RULE_LABEL[w.rule] || w.rule}】{w.message}
-          {(w.detail?.sources || []).length > 0 && (
-            <div className="muted" style={{ fontSize: 12 }}>
-              　↳ 来源：{(w.detail.sources || []).map((s) => `${s.title || '未署名'}（${s.tier}级）`).join('；')}
-            </div>
+/* ---------------- 质检报告面板：分规则校验结果 + 数值矛盾 ---------------- */
+
+function fmtNum(v) {
+  if (v === undefined || v === null || v === '') return '—'
+  if (typeof v === 'number') {
+    if (!isFinite(v)) return String(v)
+    if (Math.abs(v) >= 10000) return v.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+    return String(Math.round(v * 100) / 100)
+  }
+  return String(v)
+}
+
+// 把 checks（分规则）或 warnings（扁平）整理成按规则分组的列表
+function buildGroups(checks, warnings) {
+  const groups = []
+  const push = (key, items) => {
+    if (items && items.length > 0) groups.push({ key, label: RULE_LABEL[key] || key, items })
+  }
+  if (checks && Object.keys(checks).length > 0) {
+    RULE_ORDER.forEach((key) => push(key, checks[key]))
+    // 插件化新增的自定义规则（不在固定顺序里）追加在后
+    Object.keys(checks).forEach((key) => {
+      if (!RULE_ORDER.includes(key)) push(key, checks[key])
+    })
+  } else if (warnings && warnings.length > 0) {
+    // 旧结果 fallback：按 rule 字段分组
+    const byRule = {}
+    warnings.forEach((w) => { (byRule[w.rule || 'unknown'] = byRule[w.rule || 'unknown'] || []).push(w) })
+    Object.entries(byRule).forEach(([key, items]) => push(key, items))
+  }
+  return groups
+}
+
+// 提取需标红的关键数值（按规则差异）
+function DetailExtra({ issue }) {
+  const d = issue.detail || {}
+  switch (issue.rule) {
+    case 'financial_reconciliation':
+      return (
+        <span className="muted" style={{ fontSize: 12 }}>
+          　↳ 勾稽预期 <span className="num">{fmtNum(d.expected)}</span>，实际记录 <span className="num danger">{fmtNum(d.actual)}</span>
+        </span>
+      )
+    case 'industry_range':
+      return (
+        <span className="muted" style={{ fontSize: 12 }}>
+          　↳ 异常值 <span className="num danger">{fmtNum(d.value)}%</span>，常识区间 {fmtNum(d.range?.[0])} ~ {fmtNum(d.range?.[1])}
+        </span>
+      )
+    case 'time_series':
+      return (
+        <span className="muted" style={{ fontSize: 12 }}>
+          　↳ {fmtNum(d.from?.year)} 年 <span className="num">{fmtNum(d.from?.value)}</span> → {fmtNum(d.to?.year)} 年 <span className="num danger">{fmtNum(d.to?.value)}</span>
+        </span>
+      )
+    case 'multi_source_deviation':
+      return (
+        <span className="muted" style={{ fontSize: 12 }}>
+          　↳ 多源区间 <span className="num danger">{fmtNum(d.min)}</span> ~ <span className="num danger">{fmtNum(d.max)}</span>
+          {d.sources?.length > 0 && (
+            <>　来源：{d.sources.map((s) => `${s.title || '未署名'}（${s.tier || '?'}级）`).join('；')}</>
           )}
+        </span>
+      )
+    case 'historical_cross':
+      return (
+        <span className="muted" style={{ fontSize: 12 }}>
+          　↳ 当前 <span className="num danger">{d.current?.value || '—'}</span> vs 历史 <span className="num">{d.historical?.value || '—'}</span>
+          {d.historical?.source_tier ? `（历史为 ${d.historical.source_tier} 级信源）` : ''}
+        </span>
+      )
+    default:
+      return null
+  }
+}
+
+function QAPanel({ checks, warnings, conflicts }) {
+  const groups = buildGroups(checks, warnings)
+  const allIssues = groups.flatMap((g) => g.items)
+  const warnCount = allIssues.filter((i) => i.level !== 'verify').length
+  const verifyCount = allIssues.filter((i) => i.level === 'verify').length
+  const conflictCount = (conflicts || []).length
+
+  // 全部通过：绿色通过卡片
+  if (allIssues.length === 0 && conflictCount === 0) {
+    return (
+      <div className="card" style={{ borderColor: 'var(--success)', marginBottom: '1rem' }}>
+        <div className="sec-title" style={{ margin: '0 0 0.4rem' }}>🛡 质检报告 · Quality Report</div>
+        <div style={{ fontSize: 13.5, color: 'var(--success)', fontWeight: 600 }}>
+          ✓ 全部校验通过：财务勾稽 / 行业区间 / 时间序列 / 多源偏差 / 历史交叉验证均无异常，数值口径一致。
         </div>
-      ))}
-    </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="sec-title">🛡 质检报告 · Quality Report</div>
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <div className="qa-summary">
+          {warnCount > 0 && <span className="badge danger">⚠ 预警 {warnCount} 项</span>}
+          {verifyCount > 0 && <span className="badge part">🔍 待核实 {verifyCount} 项</span>}
+          {conflictCount > 0 && <span className="badge danger">✗ 数值矛盾 {conflictCount} 处</span>}
+        </div>
+
+        {groups.map((g) => (
+          <div key={g.key} className="qa-group">
+            <div className="qa-group-title">{g.label} <span className="muted">· {g.items.length} 项</span></div>
+            {g.items.map((it, i) => (
+              <div key={i} className={`warn-item ${it.level === 'verify' ? 'verify' : ''}`}>
+                {it.level === 'verify' ? '🔍 待核实' : '⚠ 预警'}　{it.message}
+                <div><DetailExtra issue={it} /></div>
+              </div>
+            ))}
+          </div>
+        ))}
+
+        {conflictCount > 0 && (
+          <div className="qa-group">
+            <div className="qa-group-title" style={{ color: 'var(--danger)' }}>数值矛盾 · {conflictCount} 处</div>
+            {conflicts.map((c, i) => (
+              <div key={i} className="ev-row conflict" style={{ padding: '0.6rem 0.8rem' }}>
+                <div style={{ fontSize: 13 }}>
+                  <span className="num danger">{c.claim || '—'}</span>
+                  <span className="muted" style={{ marginLeft: '0.5rem' }}>{c.section || ''}</span>
+                </div>
+                <div className="muted" style={{ fontSize: 12, marginTop: '0.2rem' }}>
+                  冲突值：{((c.values || []).map((v) => <span key={v} className="num danger" style={{ marginRight: '0.5rem' }}>{v}</span>))}
+                  {c.sources?.length > 0 && <>　来源：{c.sources.map((s) => `${s.title || '未署名'}（${s.tier || '?'}级）`).join('；')}</>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
