@@ -1,7 +1,7 @@
 // 把后端 ai_data 里的图表 dict（{type, labels, data, title}）转成 ECharts option。
 
-const BRAND = '#4A54D6'
-const PALETTE = ['#4A54D6', '#22A06B', '#E09A2B', '#D6455A', '#5B8DEF', '#7C5BE0', '#3FB6C9', '#C778C9']
+const BRAND = '#1E3A8A'
+const PALETTE = ['#1E3A8A', '#22A06B', '#E09A2B', '#D6455A', '#5B8DEF', '#7C5BE0', '#3FB6C9', '#C778C9']
 const FONT = 'Plus Jakarta Sans, PingFang SC, Microsoft YaHei, sans-serif'
 
 export function chartToOption(chart) {

@@ -4,8 +4,8 @@ Vega-Lite 由 Streamlit 内置渲染（st.vega_lite_chart），无需额外依�
 """
 import re
 
-BRAND = "#4A54D6"
-PALETTE = ["#4A54D6", "#22A06B", "#E09A2B", "#D6455A", "#5B8DEF", "#7C5BE0", "#3FB6C9", "#C778C9"]
+BRAND = "#1E3A8A"
+PALETTE = ["#1E3A8A", "#22A06B", "#E09A2B", "#D6455A", "#5B8DEF", "#7C5BE0", "#3FB6C9", "#C778C9"]
 FONT = "Plus Jakarta Sans, PingFang SC, Microsoft YaHei, sans-serif"
 
 _PLACEHOLDER = re.compile(r"\[\[(CHART|TABLE):(\d+)\]\]")

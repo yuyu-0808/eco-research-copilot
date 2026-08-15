@@ -23,7 +23,7 @@ _FONT_DIR = "C:/Windows/Fonts"
 _HEAD_FONT = "SimHei"   # 黑体（标题）
 _BODY_FONT = "SimSun"   # 宋体（正文）
 
-_BRAND = colors.HexColor("#3A49C4")
+_BRAND = colors.HexColor("#1E3A8A")
 _MUTED = colors.HexColor("#747C92")
 _DANGER = colors.HexColor("#C84052")
 _LINE = colors.HexColor("#D7DCE8")
@@ -118,9 +118,9 @@ def _add_table(story, rows):
 def _placeholder(text: str) -> str:
     """图表占位符 → 文本标注。"""
     def _chart(m):
-        return f'<font color="#3A49C4">【图 {m.group(1)}】</font>'
+        return f'<font color="#1E3A8A">【图 {m.group(1)}】</font>'
     def _table(m):
-        return f'<font color="#3A49C4">【表 {m.group(1)}】</font>'
+        return f'<font color="#1E3A8A">【表 {m.group(1)}】</font>'
     t = re.sub(r"\[\[CHART:(\d+)\]\]", _chart, text)
     t = re.sub(r"\[\[TABLE:(\d+)\]\]", _table, t)
     return t
@@ -231,7 +231,7 @@ def generate_pdf(ai_data: dict, out_path: str) -> str:
             url = r.get("url", "") if isinstance(r, dict) else ""
             line = f"[{idx}] {title_r}"
             if url:
-                line += f'　<font color="#3A49C4">{url}</font>'
+                line += f'　<font color="#1E3A8A">{url}</font>'
             story.append(Paragraph(_inline(line), st["ref"]))
 
     doc.build(story)
