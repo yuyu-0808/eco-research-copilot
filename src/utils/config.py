@@ -21,6 +21,8 @@ class Config:
     MAX_COLLECT_ROUNDS = int(os.getenv("MAX_COLLECT_ROUNDS", "3"))  # 信源检索→事实稽核 最大循环次数
     WRITE_AUDIT_ROUNDS = int(os.getenv("WRITE_AUDIT_ROUNDS", "2"))  # 内容撰写→逻辑稽核 交叉校验最大轮数
     EVIDENCE_BATCH_SIZE = int(os.getenv("EVIDENCE_BATCH_SIZE", "5"))  # 事实稽核官分批提炼：每批证据条数（防长 prompt 触发思维链爆 token）
+    EVIDENCE_PER_SOURCE_MAX = int(os.getenv("EVIDENCE_PER_SOURCE_MAX", "2"))  # 同源证据聚合：同一信源同一章节最多保留条数（砍冗余拆分，控制证据总量）
+    EVIDENCE_PER_SECTION_MAX = int(os.getenv("EVIDENCE_PER_SECTION_MAX", "8"))  # 单章证据上限：达标后不再为该章检索，避免章节间证据失衡
     REQUIRE_STRICT_EVIDENCE = os.getenv("REQUIRE_STRICT_EVIDENCE", "True").lower() in ("true", "1")  # 是否开启质量门禁
 
     # 新增：API 速率限制配置（防止频繁调用触发限流）

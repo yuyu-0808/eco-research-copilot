@@ -15,10 +15,12 @@ class AuditorAgent:
         self.client = OpenAI(api_key=Config.DEEPSEEK_API_KEY, base_url=Config.BASE_URL)
         self.model = Config.MODEL_NAME
 
-    def verify_data(self, plan_data: dict, collect_result) -> dict:
+    def verify_data(self, plan_data: dict, collect_result, existing_evidence=None) -> dict:
         """
         事实校验（代码级）：LLM 只负责把素材提炼并归属到必答问题，
         「过没过」由 validator 的代码校验决定。
+
+        existing_evidence：上一轮已累积的提炼证据（跨轮只提炼新增、累积结果时传入）。
         """
         # 兼容：新版传 dict（含 evidence），旧版传纯文本
         if isinstance(collect_result, dict):
@@ -33,11 +35,14 @@ class AuditorAgent:
         requirements = plan_data.get("research_requirements", [])
         topic = plan_data.get("topic", "")
 
-        # 1. LLM 提炼：把原始素材提炼成结构化事实，并归属到必答问题（分批提炼）
+        # 1. LLM 提炼：把本轮新增素材提炼成结构化事实，并归属到必答问题（分批提炼）
         extracted = self._extract_evidence(topic, requirements, raw_evidence)
 
         # 2. 合并：把信源元数据（tier/publisher）从采集结果回填到提炼证据
-        evidence_list = self._merge_meta(extracted, raw_evidence)
+        new_evidence = self._merge_meta(extracted, raw_evidence)
+
+        # 2.5 累积：已有提炼证据 + 本轮新增（按 URL/标题去重），供 validator 做全局校验
+        evidence_list = self._merge_evidence(existing_evidence or [], new_evidence)
 
         # 3. 代码校验（由代码判定）
         result = validate(plan_data, evidence_list)
@@ -199,6 +204,45 @@ class AuditorAgent:
                 publisher=getattr(r, "publisher", ""),
             ) for r in raw_evidence if getattr(r, "source_tier", "") not in ("E", "F")]
         return out
+
+    @staticmethod
+    def _merge_evidence(existing: list, new: list) -> list:
+        """累积合并提炼证据：已有 + 本轮新增。
+
+        同源聚合（方案 1a）：按 (question_id, source_url) 分组，每组只保留
+        信源等级最高的 top-N 条（优先保留 value 不同的数据点），砍掉冗余拆分，
+        从源头控制 evidence 总量，避免下游撰写 prompt 过长导致质量下降。
+        """
+        tier_rank = {"A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "F": 1, "": 0}
+        max_per_source = Config.EVIDENCE_PER_SOURCE_MAX
+
+        groups = {}  # (qid, url) -> list[EvidenceRecord]
+        for e in list(existing or []) + list(new or []):
+            url = getattr(e, "source_url", "") or ""
+            title = getattr(e, "source_title", "") or ""
+            qid = getattr(e, "question_id", "") or ""
+            if not url and not title:
+                continue  # 无 URL 且无标题：无法定位，丢弃
+            key = (qid, url) if url else (qid, "title:" + title)
+            groups.setdefault(key, []).append(e)
+
+        merged = []
+        for items in groups.values():
+            # 按信源等级降序，等级相同保持原顺序稳定
+            items = sorted(items, key=lambda e: tier_rank.get(getattr(e, "source_tier", ""), 0), reverse=True)
+            kept = []
+            seen_values = set()
+            for e in items:
+                v = (getattr(e, "value", "") or "").strip()
+                if v and v in seen_values:
+                    continue  # 同组内同数值的冗余条目跳过
+                if v:
+                    seen_values.add(v)
+                kept.append(e)
+                if len(kept) >= max_per_source:
+                    break
+            merged.extend(kept)
+        return merged
 
     def verify_logic(self, topic: str, markdown_report: str, references: list, safe_context: str) -> dict:
         """逻辑校验：论据溯源 + 逻辑矛盾排查，用于撰写-稽核交叉校验循环。"""

@@ -194,15 +194,49 @@ class ResearchOrchestrator:
         warnings_list = []
         checks_map = {}
 
+        # 跨轮累积：只提炼本轮新增素材，提炼结果跨轮累积（按 URL 去重），避免重复提炼与丢证据
+        acc_raw_parts = []
+        seen_urls = set()
+        acc_extracted = []  # 累积提炼后的证据
+        satisfied_sections = set()  # 单章证据已达上限的 question_id，后续检索避开
+
         while current_round <= max_rounds:
             self.ckpt.check_pause()  # 每轮边界也支持暂停
             self.logger.log_event("Orchestrator", "INFO", f"=== 开启第 {current_round}/{max_rounds} 轮信源稽核循环 ===")
 
             collect_result = self.researcher.collect_data(plan_data, feedback)
-            verify_result = self.auditor.verify_data(plan_data, collect_result)
+
+            if isinstance(collect_result, dict):
+                round_raw = collect_result.get("raw_context", "")
+                round_evidence = collect_result.get("evidence", [])
+            else:
+                round_raw = collect_result or ""
+                round_evidence = []
+
+            if round_raw:
+                acc_raw_parts.append(round_raw)
+
+            # 只筛出本轮新增素材（URL 没见过的），避免重复提炼已见过的素材
+            new_materials = []
+            for ev in round_evidence:
+                url = getattr(ev, "source_url", "") or ""
+                title = getattr(ev, "source_title", "") or ""
+                key = url or ("title:" + title)
+                if not key or key in seen_urls:
+                    continue
+                seen_urls.add(key)
+                new_materials.append(ev)
+
+            # 只提炼新增素材，并把提炼结果累积到已有证据，逐步补齐、最终收敛
+            verify_result = self.auditor.verify_data(
+                plan_data,
+                {"raw_context": "\n\n".join(acc_raw_parts), "evidence": new_materials},
+                existing_evidence=acc_extracted,
+            )
+            acc_extracted = verify_result.get("evidence", [])  # 累积提炼结果
             is_pass = verify_result.get("is_pass", False)
 
-            # 每轮都记录最新结果，无论是否达标；非严格模式轮次耗尽时最后一轮证据也能保留
+            # 每轮都记录最新结果，无论是否达标；非严格模式轮次耗尽时最后累积结果也能保留
             verified_context = verify_result.get("verified_context", "")
             evidence_list = verify_result.get("evidence", [])
             conflicts_list = verify_result.get("conflicts", [])
@@ -211,11 +245,23 @@ class ResearchOrchestrator:
             warnings_list = verify_result.get("warnings", [])
             checks_map = verify_result.get("checks", {})
 
+            # 单章上限：某章证据已达上限，标记为已满足，后续检索避开该章
+            for qid, count in coverage_map.items():
+                if count >= Config.EVIDENCE_PER_SECTION_MAX:
+                    satisfied_sections.add(qid)
+
             if is_pass:
                 self.logger.log_event("Orchestrator", "SUCCESS", "✅ 数据质量达标，跳出内循环。")
                 break
             else:
                 feedback = verify_result.get("feedback", "未知原因不合格")
+                if satisfied_sections:
+                    names = [
+                        r.get("section") or r.get("question_id")
+                        for r in plan_data.get("research_requirements", [])
+                        if r.get("question_id") in satisfied_sections
+                    ]
+                    feedback += f"\n（以下章节证据已充足，无需再检索：{'、'.join(names)}）"
                 self.logger.log_event("Orchestrator", "WARNING", f"❌ 稽核被驳回，准备开启下一轮。打回理由: {feedback}")
                 current_round += 1
 
@@ -227,8 +273,8 @@ class ResearchOrchestrator:
 
         # 如果宽容模式开启，或者通过了门禁，继续向下执行
         if not is_pass:
-            fallback_text = collect_result.get("raw_context", "") if isinstance(collect_result, dict) else str(collect_result or "")
-            verified_context = "（注：证据不充分，但已跳过拦截）" + fallback_text
+            fallback_text = "\n\n".join(acc_raw_parts)
+            verified_context = "（注：证据不充分，但已跳过拦截）\n" + fallback_text
 
         self.ckpt.mark_done("research", {"verified_context": verified_context})
         self.ckpt.mark_done("verify", {
