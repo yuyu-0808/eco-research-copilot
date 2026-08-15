@@ -305,6 +305,7 @@ class ResearchOrchestrator:
             self.logger.log_event("Orchestrator", "INFO", "♻️ 断点续跑：阶段「渲染排版」已完成，跳过。")
             return data.get("docx_path", "")
         self.ckpt.check_pause()
+        verify_data = self.ckpt.stage_data("verify") or {}
         ai_data = {
             "report_title": structure.get("report_title", ""),
             "publish_date": structure.get("publish_date", ""),
@@ -313,6 +314,7 @@ class ResearchOrchestrator:
             "charts": structure.get("charts", []),
             "tables": structure.get("tables", []),
             "references": structure.get("references", []),
+            "evidence": verify_data.get("evidence", []),
         }
         docx_path = self.renderer.format_delivery(self.project_name, ai_data)
         self.ckpt.mark_done("render", {"docx_path": docx_path})

@@ -273,29 +273,156 @@ class DocxWriter:
             self._set_run_font(run, size=10.5, bold=True)
             self._add_hyperlink(p, url, title)
 
+    # ---------- 券商研报排版（封面 / 目录 / 页眉页脚 / 数据附表） ----------
+    def _setup_header_footer(self, doc, title: str):
+        """页眉=报告标题，页脚=居中页码。"""
+        section = doc.sections[0]
+        hp = section.header.paragraphs[0]
+        hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = hp.add_run(title)
+        self._set_run_font(run, size=9, cn=self.CN_FONT, color="8B92AE")
+        fp = section.footer.paragraphs[0]
+        fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._add_page_number(fp)
+
+    def _add_page_number(self, paragraph):
+        """在段落里插入 PAGE 字段（自动页码）。"""
+        run = paragraph.add_run()
+        self._set_run_font(run, size=9, cn=self.CN_FONT, color="8B92AE")
+        fld_begin = OxmlElement('w:fldChar')
+        fld_begin.set(qn('w:fldCharType'), 'begin')
+        instr = OxmlElement('w:instrText')
+        instr.set(qn('xml:space'), 'preserve')
+        instr.text = 'PAGE'
+        fld_end = OxmlElement('w:fldChar')
+        fld_end.set(qn('w:fldCharType'), 'end')
+        run._r.append(fld_begin)
+        run._r.append(instr)
+        run._r.append(fld_end)
+
+    def _add_cover(self, doc, ai_data: dict):
+        """封面页：报告标题 + 副标题 + 日期 + 免责声明。"""
+        title = ai_data.get("report_title", "行业研究报告")
+        for _ in range(3):
+            p = doc.add_paragraph()
+            self._set_para(p, first_indent_chars=0)
+
+        p = doc.add_paragraph()
+        self._set_para(p, align=WD_ALIGN_PARAGRAPH.CENTER, first_indent_chars=0, space_after=18)
+        run = p.add_run(title)
+        self._set_run_font(run, size=22, bold=True, cn=self.HEADING_FONT)
+
+        p = doc.add_paragraph()
+        self._set_para(p, align=WD_ALIGN_PARAGRAPH.CENTER, first_indent_chars=0, space_after=10)
+        run = p.add_run("行业研究报告")
+        self._set_run_font(run, size=15, cn=self.CN_FONT, color="6A7180")
+
+        p = doc.add_paragraph()
+        self._set_para(p, align=WD_ALIGN_PARAGRAPH.CENTER, first_indent_chars=0, space_after=8)
+        run = p.add_run(f"发布日期：{ai_data.get('publish_date', '')}    研究引擎：Eco-Research Copilot")
+        self._set_run_font(run, size=11, cn=self.CN_FONT, color="6A7180")
+
+        for _ in range(6):
+            doc.add_paragraph()
+
+        p = doc.add_paragraph()
+        self._set_para(p, align=WD_ALIGN_PARAGRAPH.CENTER, first_indent_chars=0, space_after=4)
+        run = p.add_run("免责声明")
+        self._set_run_font(run, size=10.5, bold=True, cn=self.CN_FONT)
+
+        p = doc.add_paragraph()
+        self._set_para(p, align=WD_ALIGN_PARAGRAPH.JUSTIFY, first_indent_chars=0, space_after=0)
+        disclaimer = (
+            "本报告由 Eco-Research Copilot 自动生成，仅供研究参考，不构成任何投资建议。"
+            "报告数据来自公开信源，虽经多级代码校验，仍可能存在遗漏或偏差，使用者应自行核实。"
+        )
+        run = p.add_run(disclaimer)
+        self._set_run_font(run, size=9, cn=self.CN_FONT, color="8B92AE")
+        doc.add_page_break()
+
+    def _add_toc(self, doc, ai_data: dict):
+        """静态目录：基于正文二级标题。"""
+        headings = self._extract_headings(ai_data.get("markdown_report", ""))
+        if not headings:
+            return
+        self._add_h1(doc, "目录")
+        for h in headings:
+            p = doc.add_paragraph()
+            self._set_para(p, first_indent_chars=0, space_after=3)
+            run = p.add_run(h)
+            self._set_run_font(run, size=11, cn=self.CN_FONT)
+        doc.add_page_break()
+
+    @staticmethod
+    def _extract_headings(md: str) -> list:
+        if not md:
+            return []
+        return re.findall(r'^##\s+(.+)$', md, re.M)
+
+    def _add_data_appendix(self, doc, evidence):
+        """数据附表：汇总报告中所有量化指标成规范表格，方便直接取用。"""
+        from src.utils.metrics_store import extract_metrics
+        entries = extract_metrics(evidence or [])
+        if not entries:
+            return
+        self._add_h1(doc, "附：数据附表")
+        headers = ["指标", "数值", "单位", "时间", "信源等级", "来源"]
+        tbl = doc.add_table(rows=1, cols=len(headers))
+        tbl.style = 'Table Grid'
+        tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+        hdr = tbl.rows[0].cells
+        for j, h in enumerate(headers):
+            hdr[j].text = h
+            for para in hdr[j].paragraphs:
+                for run in para.runs:
+                    self._set_run_font(run, size=10.5, bold=True)
+        for en in entries:
+            cells = tbl.add_row().cells
+            row = [
+                en.get("metric_label", ""),
+                str(en.get("value", "")),
+                en.get("unit", "") or "",
+                en.get("period", "") or "",
+                en.get("source_tier", ""),
+                en.get("source_title") or en.get("publisher", "") or "",
+            ]
+            for j, v in enumerate(row):
+                cells[j].text = v
+                for para in cells[j].paragraphs:
+                    for run in para.runs:
+                        self._set_run_font(run, size=10.5)
+        p = doc.add_paragraph()
+        self._set_para(p, first_indent_chars=0, space_after=6)
+
     # ---------- 主流程 ----------
     def generate_report(self, ai_data: dict) -> str:
-        """从头构建一份学术格式的研究报告"""
+        """从头构建一份券商研报格式的研究报告（封面 / 目录 / 正文 / 数据附表 / 参考文献）。"""
         doc = Document()
         temp_files = []
+        title = ai_data.get("report_title", "行业研究报告")
 
-        # 1. 标题与元信息
-        self._add_title(doc, ai_data.get("report_title", "行业研究报告"))
-        self._add_meta(doc, f"发布日期：{ai_data.get('publish_date', '')}    研究引擎：Eco-Research")
+        # 0. 页眉页脚（券商研报排版）
+        self._setup_header_footer(doc, title)
 
-        # 2. 摘要（核心洞察）
+        # 1. 封面 + 免责声明
+        self._add_cover(doc, ai_data)
+
+        # 2. 目录
+        self._add_toc(doc, ai_data)
+
+        # 3. 摘要（核心洞察）
         core = ai_data.get("core_insights", "")
         if core:
             self._add_h1(doc, '摘要')
             self._add_body(doc, core)
 
-        # 3. 正文（图表穿插其中）
+        # 4. 正文（图表穿插其中）
         tables = ai_data.get("tables", [])
         charts = ai_data.get("charts", [])
         md = ai_data.get("markdown_report", "")
         used_charts, used_tables = self._add_markdown(doc, md, charts, tables, temp_files)
 
-        # 3.5 兜底：正文未引用的图表/表格追加到「附：补充数据」
+        # 4.5 兜底：正文未引用的图表/表格追加到「附：补充数据」
         unused_charts = [c for i, c in enumerate(charts) if i not in used_charts]
         unused_tables = [t for i, t in enumerate(tables) if i not in used_tables]
         if unused_tables or unused_charts:
@@ -309,7 +436,10 @@ class DocxWriter:
                     if f:
                         temp_files.append(f)
 
-        # 4. 参考文献
+        # 5. 数据附表（量化指标汇总）
+        self._add_data_appendix(doc, ai_data.get("evidence", []))
+
+        # 6. 参考文献
         self._add_references(doc, ai_data.get("references", []))
 
         doc.save(self.output_docx)
