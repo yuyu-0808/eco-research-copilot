@@ -126,9 +126,9 @@ cp .env.example .env
 
 ### 运行
 
-先启动后端 API（FastAPI）：
+先启动后端 API（FastAPI，端口 8010，与前端 Vite 代理保持一致）：
 ```bash
-uvicorn server.main:app --reload
+uvicorn server.main:app --reload --port 8010
 ```
 再启动前端（React + Vite）：
 ```bash
@@ -136,7 +136,7 @@ cd web
 npm install
 npm run dev
 ```
-浏览器打开 Vite 输出的地址（默认 `http://localhost:5173`），输入课题即可开始；后端 API 文档见 `http://localhost:8000/docs`。
+浏览器打开 Vite 输出的地址（默认 `http://localhost:5173`），输入课题即可开始；后端 API 文档见 `http://localhost:8010/docs`。
 
 ## 项目结构
 
