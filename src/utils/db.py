@@ -191,7 +191,7 @@ def _insert_metrics(conn, framework_key: str, entries: list, report_id: str) -> 
     return added
 
 
-def metrics_list(framework_key: str = None, metric: str = None, period: str = None) -> list:
+def metrics_list(framework_key: str = None, metric: str = None, period: str = None, year: int = None) -> list:
     """检索指标（可按行业 / 指标 / 时间过滤）。"""
     _ensure_init()
     sql = "SELECT * FROM metrics WHERE 1=1"
@@ -205,6 +205,9 @@ def metrics_list(framework_key: str = None, metric: str = None, period: str = No
     if period:
         sql += " AND period=?"
         args.append(period)
+    if year is not None:
+        sql += " AND year=?"
+        args.append(int(year))
     sql += " ORDER BY saved_at DESC, id DESC"
     conn = _connect()
     try:
@@ -219,6 +222,55 @@ def metrics_framework_keys() -> list:
     conn = _connect()
     try:
         return [r[0] for r in conn.execute("SELECT DISTINCT framework_key FROM metrics ORDER BY framework_key")]
+    finally:
+        conn.close()
+
+
+_METRICS_EDITABLE = {
+    "framework_key", "metric", "metric_label", "value", "value_norm", "unit",
+    "period", "year", "source_title", "source_url", "source_tier", "publisher",
+}
+
+
+def metrics_update(metric_id: int, fields: dict) -> bool:
+    """按 id 更新指标条目，返回是否命中。"""
+    _ensure_init()
+    sets, args = [], []
+    for k, v in (fields or {}).items():
+        if k in _METRICS_EDITABLE:
+            sets.append(f"{k}=?")
+            args.append(v)
+    if not sets:
+        return False
+    args.append(int(metric_id))
+    conn = _connect()
+    try:
+        cur = conn.execute(f"UPDATE metrics SET {', '.join(sets)} WHERE id=?", args)
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def metrics_delete(metric_id: int) -> bool:
+    """按 id 删除指标条目，返回是否命中。"""
+    _ensure_init()
+    conn = _connect()
+    try:
+        cur = conn.execute("DELETE FROM metrics WHERE id=?", (int(metric_id),))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def metrics_get(metric_id: int) -> dict:
+    """按 id 读取单条指标。"""
+    _ensure_init()
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT * FROM metrics WHERE id=?", (int(metric_id),)).fetchone()
+        return dict(row) if row else None
     finally:
         conn.close()
 

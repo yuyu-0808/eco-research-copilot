@@ -71,9 +71,98 @@ def _all_keys() -> list:
     return db.metrics_framework_keys()
 
 
-def query_metrics(framework_key: str = None, metric: str = None, period: str = None) -> list:
+def add_metric_manual(framework_key: str, metric: str, value: str, period: str = "",
+                      source_tier: str = "D", source_title: str = "", source_url: str = "",
+                      publisher: str = "", unit: str = "") -> int:
+    """手动录入一条指标（自动归一化 + 年份提取），返回新增条数（0=未入库）。
+
+    framework_key 为 generic 或空时拒绝入库（同自动沉淀策略）。
+    """
+    if not framework_key or framework_key == "generic":
+        return 0
+    nv = normalize_value(value)
+    if nv is None:
+        return 0
+    p = normalize_period(period)
+    entry = {
+        "metric": metric,
+        "metric_label": metric_label(metric),
+        "value": value,
+        "value_norm": nv.value,
+        "unit": unit or nv.unit,
+        "period": period,
+        "year": p.year if p else None,
+        "source_title": source_title,
+        "source_url": source_url,
+        "source_tier": source_tier or "D",
+        "publisher": publisher,
+    }
+    return db.metrics_insert(framework_key, [entry], report_id="manual")
+
+
+_EDITABLE_FIELDS = {
+    "framework_key", "metric", "value", "unit", "period", "year",
+    "source_title", "source_url", "source_tier", "publisher",
+}
+
+
+def update_metric(metric_id: int, fields: dict) -> bool:
+    """编辑一条指标；若 value / period 变化则重新归一化。"""
+    fields = dict(fields or {})
+    # 去除非可编辑字段，只保留白名单
+    editable = {k: v for k, v in fields.items() if k in _EDITABLE_FIELDS}
+    if not editable:
+        return False
+    if "value" in editable:
+        nv = normalize_value(str(editable["value"]))
+        if nv is None:
+            return False
+        editable["value_norm"] = nv.value
+        if not editable.get("unit"):
+            editable["unit"] = nv.unit
+    if "period" in editable and "year" not in editable:
+        p = normalize_period(str(editable["period"]))
+        editable["year"] = p.year if p else None
+    if "metric" in editable and "metric_label" not in editable:
+        editable["metric_label"] = metric_label(editable["metric"])
+    return db.metrics_update(metric_id, editable)
+
+
+def delete_metric(metric_id: int) -> bool:
+    """删除一条指标。"""
+    return db.metrics_delete(metric_id)
+
+
+def metric_trend(framework_key: str, metric: str) -> list:
+    """单指标趋势：按年份聚合（同年取信源等级最高者），返回升序序列。
+
+    返回 [{"year", "value", "value_norm", "source_tier"}]
+    """
+    rows = db.metrics_list(framework_key, metric)
+    by_year = {}
+    for r in rows:
+        y = r.get("year")
+        if y is None:
+            continue
+        cur_rank = _TIER_RANK.get(r.get("source_tier", ""), 0)
+        old = by_year.get(y)
+        if old is None or cur_rank > _TIER_RANK.get(old.get("source_tier", ""), 0):
+            by_year[y] = r
+    return [
+        {
+            "year": y,
+            "value": r.get("value"),
+            "value_norm": r.get("value_norm"),
+            "unit": r.get("unit"),
+            "source_tier": r.get("source_tier"),
+        }
+        for y, r in sorted(by_year.items())
+    ]
+
+
+def query_metrics(framework_key: str = None, metric: str = None, period: str = None, year: int = None) -> list:
     """检索指标库（可按行业 / 指标 / 时间过滤）。"""
-    rows = db.metrics_list(framework_key, metric, period)
+    rows = db.metrics_list(framework_key, metric, period, year)
     for r in rows:
         r.setdefault("framework_key", framework_key or "")
     return rows
