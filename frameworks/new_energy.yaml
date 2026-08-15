@@ -1,0 +1,127 @@
+# 新能源 / 先进制造 行研框架（框架引擎 2.0）
+# 新增行业 = 复制本文件改名 + 修改 key/name/keywords 即可，无需改核心代码。
+key: new_energy
+name: 新能源 / 先进制造
+keywords:
+  - 新能源
+  - 锂电
+  - 锂电池
+  - 光伏
+  - 储能
+  - 风电
+  - 氢能
+  - 半导体
+  - 芯片
+  - 集成电路
+  - eda
+  - 汽车
+  - 整车
+  - 智能驾驶
+  - 动力电池
+  - 制造
+  - 工业
+  - 机器人
+  - 充电
+  - 电池
+
+# 核心指标库：该行业标配指标（单位 + 口径说明），供证据校验与 prompt 注入
+metrics_library:
+  装机量:
+    unit: GW
+    desc: 年度新增装机容量（风电/光伏/储能）
+  渗透率:
+    unit: "%"
+    desc: 新能源汽车渗透率
+  单车带电量:
+    unit: kWh
+    desc: 单车平均带电度数
+  单位成本:
+    unit: 元/Wh
+    desc: 电芯单位成本
+  市场规模:
+    unit: 亿元
+    desc: 行业市场规模
+  出货量:
+    unit: GWh
+    desc: 动力电池出货量
+  产能利用率:
+    unit: "%"
+    desc: 产能利用率
+
+# 分析模型：行业化的分析维度（非通用模板）
+analysis_models:
+  - 波特五力（供应商议价 / 下游车企议价 / 新进入者 / 替代品 / 同行竞争）
+  - SWOT
+  - PEST（政策补贴 / 双碳 / 技术路线）
+  - 产业链价值分布（上游资源 / 中游制造 / 下游应用）
+
+# 产业链图谱：上下游环节清单
+supply_chain:
+  upstream:
+    - 锂矿
+    - 正极材料
+    - 负极材料
+    - 隔膜
+    - 电解液
+  midstream:
+    - 电芯
+    - 电池包
+    - 动力电池系统
+  downstream:
+    - 整车制造
+    - 储能系统
+    - 充电桩
+
+# 重点公司：核心玩家名录
+key_players:
+  - 宁德时代
+  - 比亚迪
+  - LG新能源
+  - 松下
+  - 中创新航
+  - 亿纬锂能
+  - 阳光电源
+  - 隆基绿能
+
+# 标准章节结构（每章含必答问题 + 核心指标 + 证据门槛）
+sections:
+  - title: 一、行业概览
+    question: 行业市场规模、同比增速、渗透率等基础量
+    metrics:
+      - 市场规模
+      - 同比增速
+      - 渗透率
+    min_evidence: 2
+    min_tier: B
+  - title: 二、产业链分析
+    question: 产业链上下游结构及关键环节价值分布
+    metrics:
+      - 产业链环节
+      - 成本占比
+      - 关键环节格局
+    min_evidence: 2
+    min_tier: C
+  - title: 三、竞争格局
+    question: 市场集中度、头部厂商份额与竞争壁垒
+    metrics:
+      - 市场集中度
+      - 头部厂商份额
+      - 竞争壁垒
+    min_evidence: 2
+    min_tier: B
+  - title: 四、政策环境
+    question: 相关政策、补贴细则与监管趋势
+    metrics:
+      - 政策名称
+      - 补贴标准
+      - 监管要求
+    min_evidence: 2
+    min_tier: A
+  - title: 五、趋势研判与投资机会
+    question: 行业发展趋势、风险与投资机会
+    metrics:
+      - 发展趋势
+      - 风险点
+      - 投资机会
+    min_evidence: 1
+    min_tier: C

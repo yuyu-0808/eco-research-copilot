@@ -1,0 +1,120 @@
+# TMT / 互联网科技 行研框架（框架引擎 2.0）
+key: tmt
+name: TMT / 互联网科技
+keywords:
+  - 互联网
+  - 软件
+  - saas
+  - 云计算
+  - ai
+  - 人工智能
+  - 大模型
+  - 游戏
+  - 电商
+  - 社交
+  - 广告
+  - 数据
+  - 5g
+  - 通信
+  - it
+  - 科技
+  - 数字化
+  - 算力
+
+# 核心指标库
+metrics_library:
+  市场规模:
+    unit: 亿元
+    desc: 行业市场规模
+  用户规模:
+    unit: 亿
+    desc: 活跃用户规模
+  渗透率:
+    unit: "%"
+    desc: 目标人群渗透率
+  同比增速:
+    unit: "%"
+    desc: 收入 / 用户同比增速
+  ARPU:
+    unit: 元
+    desc: 单用户平均收入
+  付费率:
+    unit: "%"
+    desc: 付费用户占比
+  算力规模:
+    unit: EFLOPS
+    desc: 总算力规模
+
+# 分析模型
+analysis_models:
+  - 波特五力
+  - SWOT
+  - 网络效应（双边 / 规模效应）
+  - 飞轮模型（数据 → 算法 → 体验）
+
+# 产业链图谱
+supply_chain:
+  upstream:
+    - 芯片
+    - 算力
+    - 数据中心
+  midstream:
+    - 平台
+    - 应用
+    - 模型
+  downstream:
+    - 用户
+    - 企业客户
+
+# 重点公司
+key_players:
+  - 腾讯
+  - 阿里巴巴
+  - 字节跳动
+  - 百度
+  - 微软
+  - 谷歌
+  - 英伟达
+  - 华为
+
+# 标准章节结构
+sections:
+  - title: 一、行业概览
+    question: 行业市场规模、用户规模、增速
+    metrics:
+      - 市场规模
+      - 用户规模
+      - 同比增速
+    min_evidence: 2
+    min_tier: B
+  - title: 二、商业模式与价值链
+    question: 商业模式、收入结构、价值链分布
+    metrics:
+      - 商业模式
+      - 收入结构
+      - 价值链
+    min_evidence: 2
+    min_tier: C
+  - title: 三、竞争格局
+    question: 市场份额、头部玩家、竞争壁垒
+    metrics:
+      - 市场份额
+      - 头部玩家
+      - 竞争壁垒
+    min_evidence: 2
+    min_tier: B
+  - title: 四、政策与监管
+    question: 监管政策、数据合规、行业规范
+    metrics:
+      - 监管政策
+      - 合规要求
+    min_evidence: 2
+    min_tier: A
+  - title: 五、趋势研判与投资机会
+    question: 技术趋势、风险与投资机会
+    metrics:
+      - 技术趋势
+      - 风险点
+      - 投资机会
+    min_evidence: 1
+    min_tier: C

@@ -1,0 +1,117 @@
+# 大消费 / 消费服务 行研框架（框架引擎 2.0）
+key: consumer
+name: 大消费 / 消费服务
+keywords:
+  - 消费
+  - 零售
+  - 食品
+  - 饮料
+  - 白酒
+  - 家电
+  - 服装
+  - 美妆
+  - 医药
+  - 医疗
+  - 旅游
+  - 餐饮
+  - 教育
+  - 地产
+  - 家居
+  - 免税
+  - 化妆品
+  - 品牌
+
+# 核心指标库
+metrics_library:
+  市场规模:
+    unit: 亿元
+    desc: 行业市场规模
+  同比增速:
+    unit: "%"
+    desc: 收入同比增速
+  渗透率:
+    unit: "%"
+    desc: 品类渗透率
+  复购率:
+    unit: "%"
+    desc: 复购率
+  客单价:
+    unit: 元
+    desc: 客单价
+  门店数:
+    unit: 家
+    desc: 门店数量
+  市占率:
+    unit: "%"
+    desc: 市场份额
+
+# 分析模型
+analysis_models:
+  - 波特五力
+  - SWOT
+  - 4P（产品 / 价格 / 渠道 / 促销）
+  - 消费升级趋势（结构升级 / 品牌化 / 下沉市场）
+
+# 产业链图谱
+supply_chain:
+  upstream:
+    - 原材料
+    - 制造
+  midstream:
+    - 品牌
+    - 渠道
+  downstream:
+    - 终端零售
+    - 消费者
+
+# 重点公司
+key_players:
+  - 贵州茅台
+  - 五粮液
+  - 美的集团
+  - 格力电器
+  - 伊利股份
+  - 蒙牛乳业
+  - 海底捞
+  - 泡泡玛特
+
+# 标准章节结构
+sections:
+  - title: 一、行业概览
+    question: 市场规模、增速、渗透率
+    metrics:
+      - 市场规模
+      - 同比增速
+      - 渗透率
+    min_evidence: 2
+    min_tier: B
+  - title: 二、需求与消费结构
+    question: 需求驱动、消费结构、用户画像
+    metrics:
+      - 需求驱动
+      - 消费结构
+    min_evidence: 2
+    min_tier: C
+  - title: 三、竞争格局
+    question: 市场集中度、品牌格局、渠道
+    metrics:
+      - 市场集中度
+      - 品牌份额
+      - 渠道结构
+    min_evidence: 2
+    min_tier: B
+  - title: 四、政策与宏观环境
+    question: 相关政策、宏观环境、监管
+    metrics:
+      - 政策
+      - 宏观环境
+    min_evidence: 2
+    min_tier: A
+  - title: 五、趋势研判与投资机会
+    question: 消费趋势、风险与投资机会
+    metrics:
+      - 消费趋势
+      - 风险点
+      - 投资机会
+    min_evidence: 1
+    min_tier: C

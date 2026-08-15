@@ -10,6 +10,14 @@ python-dotenv
 # 大模型调用
 openai
 
+# 行研框架插件化配置（frameworks/*.yaml）
+pyyaml
+
+# Web API 后端（server/）
+fastapi
+uvicorn
+apscheduler
+
 # 搜索工具（可切换 tavily / duckduckgo）
 tavily-python
 ddgs

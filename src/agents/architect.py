@@ -52,6 +52,10 @@ class ArchitectAgent:
         """
         requirements = plan_data.get("research_requirements", [])
         outline = plan_data.get("outline", [])
+        metrics_library = plan_data.get("metrics_library", {})
+        analysis_models = plan_data.get("analysis_models", [])
+        supply_chain = plan_data.get("supply_chain", {})
+        key_players = plan_data.get("key_players", [])
         prompt = f"""
         你是资深【课题架构师】。已有一个标准行研框架，请在【不改变章节结构】的前提下，
         针对课题 "{user_topic}" 微调每个必答问题的表述，使其更贴合该行业的具体数据维度。
@@ -62,10 +66,22 @@ class ArchitectAgent:
         【当前必答问题（含约束字段）】：
         {json.dumps(requirements, ensure_ascii=False)}
 
+        【行业核心指标库（微调 metrics 时优先从库中选真实指标名）】：
+        {json.dumps(metrics_library, ensure_ascii=False)}
+
+        【分析模型】：
+        {json.dumps(analysis_models, ensure_ascii=False)}
+
+        【产业链图谱（上下游环节）】：
+        {json.dumps(supply_chain, ensure_ascii=False)}
+
+        【重点公司】：
+        {json.dumps(key_players, ensure_ascii=False)}
+
         要求：
         1. 只输出与输入条数相同的 research_requirements 数组，逐条对应；
         2. 每条保留 question_id / required / min_evidence / min_tier / section 原值不变；
-        3. 只可微调 text（必答问题表述，更具体化）和 metrics（核心指标，可替换为行业真实指标名）；
+        3. 只可微调 text（必答问题表述，更具体化）和 metrics（核心指标，优先替换为行业核心指标库中的真实指标名）；
         4. 严禁新增、删除或调整章节；严禁改变 question_id 与 section 的对应关系。
 
         严格输出 JSON：{{"research_requirements": [...]}}

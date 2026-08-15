@@ -1,0 +1,51 @@
+# 通用行业研究框架（兜底：课题匹配不到任何行业时使用）
+key: generic
+name: 通用行业研究
+keywords: []
+
+# 通用框架不预设指标库 / 产业链 / 重点公司（由 LLM 在采集阶段补充）
+metrics_library: {}
+analysis_models:
+  - 波特五力
+  - SWOT
+  - PEST
+supply_chain: {}
+key_players: []
+
+sections:
+  - title: 一、行业概览
+    question: 市场规模、增速、现状
+    metrics:
+      - 市场规模
+      - 增速
+    min_evidence: 2
+    min_tier: B
+  - title: 二、产业链 / 价值链分析
+    question: 产业链结构、价值分布
+    metrics:
+      - 产业链
+      - 价值分布
+    min_evidence: 2
+    min_tier: C
+  - title: 三、竞争格局
+    question: 市场份额、竞争壁垒
+    metrics:
+      - 市场份额
+      - 竞争壁垒
+    min_evidence: 2
+    min_tier: B
+  - title: 四、政策环境
+    question: 政策、监管
+    metrics:
+      - 政策
+      - 监管
+    min_evidence: 2
+    min_tier: A
+  - title: 五、趋势研判与投资机会
+    question: 趋势、风险、机会
+    metrics:
+      - 趋势
+      - 风险
+      - 机会
+    min_evidence: 1
+    min_tier: C
