@@ -10,7 +10,7 @@
 
 | 亮点 | 说明 |
 |------|------|
-| **行研框架引擎** | 内置新能源/先进制造、TMT/互联网、大消费、通用行业等共识框架，输出结构由框架固定，专业度有保障 |
+| **行研框架引擎** | 内置新能源/先进制造、TMT / 互联网科技、大消费 / 消费服务、通用行业等共识框架，输出结构由框架固定，专业度有保障 |
 | **代码级证据校验** | 每章证据数达标 + 核心指标信源等级门槛 + 数值矛盾标红，全部由代码判定 |
 | **行业指标知识库** | 报告生成后有效指标自动沉淀入库（时间/来源/数值），下次同行业研究自动调历史数据交叉验证，冲突优先提示高等级信源 |
 | **证据溯源面板** | 每条结论绑定信源等级 / 机构 / 原文摘录 / 链接，报告页逐条核查，矛盾数据标红提示 |
@@ -60,12 +60,12 @@ flowchart LR
 
 | 阶段 | Agent | 职责 | 关键产出 |
 |------|-------|------|---------|
-| 1. 架构 | **课题架构师** | 匹配内置行研框架（新能源/先进制造、TMT/互联网、大消费、通用行业），生成标准章节 + 每章证据要求，LLM 仅微调 | `research_requirements` |
+| 1. 架构 | **课题架构师** | 匹配内置行研框架（新能源/先进制造、TMT / 互联网科技、大消费 / 消费服务、通用行业），生成标准章节 + 每章证据要求，LLM 仅微调 | `research_requirements` |
 | 2. 检索 | **信源研究员** | 多源检索（Tavily / DuckDuckGo），给每条信源打 A-F 六级等级 | 带评级的原始素材 |
 | 3. 稽核 · 素材层 | **事实稽核官** | 代码级证据校验：证据数 / 信源等级门槛 / 数值矛盾 / 投研专属规则，不达标打回重搜 | `verified_context` + `evidence` |
 | 4. 提炼 | **交付渲染官** | 结构化提炼：标题 / 摘要 / 大纲 / 图表 / 表格 / 参考文献 | `structure` |
 | 5. 撰写 + 逻辑稽核 | **内容撰写师** × **事实稽核官** | 撰写师分章撰写正文，事实稽核官做逻辑校验（论据溯源 + 逻辑矛盾排查），争议打回重写 | `markdown_report` |
-| 6. 渲染 | **交付渲染官** | 文字润色 + 排版，生成学术格式 Word 文档；完成后指标自动沉淀入行业指标库 | `05_final_report.docx` |
+| 6. 渲染 | **交付渲染官** | 文字润色 + 排版，生成券商研报格式 Word 文档；完成后指标自动沉淀入行业指标库 | `05_final_report.docx` |
 
 > 事实稽核官、交付渲染官各出现两次，是**同一角色在两个职责阶段的复用**：稽核官分别在**素材层**（证据校验）与**终稿层**（逻辑校验）把关，渲染官分别在**提炼**（内容结构）与**排版**（格式交付）把关。
 
@@ -118,11 +118,19 @@ cp .env.example .env
 | `TAVILY_API_KEY` | 必填 | 使用 Tavily 搜索时必填 |
 | `DDG_PROXY` | — | 使用 ddg 时的可选代理，如 `http://127.0.0.1:7890` |
 | `MAX_COLLECT_ROUNDS` | — | 检索-稽核循环最大轮数，默认 3 |
+| `WRITE_AUDIT_ROUNDS` | — | 撰写-逻辑稽核交叉校验最大轮数，默认 2 |
+| `EVIDENCE_BATCH_SIZE` | — | 事实稽核官分批提炼每批证据条数，默认 5 |
 | `REQUIRE_STRICT_EVIDENCE` | — | 是否开启质量门禁熔断，默认 True |
 | `REPORT_MODE` | — | `standard`（快）/ `deep`（分章，更充实） |
+| `REPORT_FORMAT` | — | 交付格式：`docx`（Word）/ `markdown`，默认 `docx` |
 | `REVIEW_MODE` | — | `auto`（全自动）/ `manual`（三阶段人机确认：框架→素材→终稿） |
 | `API_RATE_LIMIT_SECONDS` | — | 每次 API 调用最小间隔秒数，默认 5（防限流） |
 | `MAX_RETRY_WAIT_SECONDS` | — | 最大重试等待秒数，默认 30 |
+| `STAGE_RETRY` | — | 阶段级自动重试次数，默认 2 |
+| `REPORT_DISCLAIMER` | — | 报告免责声明（空=用内置默认） |
+| `REPORT_HEADER` | — | 页眉文本（空=用报告标题） |
+| `REPORT_FOOTER` | — | 页脚文本（空=用自动页码） |
+| `REPORT_LOGO` | — | Logo 图片路径（空=不显示） |
 
 ### 运行
 
@@ -148,7 +156,8 @@ eco-research-copilot/
 │       └── ...              # 组件、图表、Markdown 渲染、API 封装
 ├── server/                  # 后端 API（FastAPI + WebSocket）
 │   ├── main.py              # 应用入口（路由挂载 / CORS / 鉴权 / 异常处理）
-│   └── api/                 # projects / research / metrics / settings / export / frameworks / ...
+│   ├── api/                 # projects / research / review / metrics / settings / stats / frameworks / export
+│   └── workers/             # 后台任务队列（APScheduler：运行 / 暂停 / 续跑 / 终止）
 ├── src/                     # 核心业务逻辑（前后端共用）
 │   ├── orchestrator.py      # 多智能体编排器（含检索-稽核内循环）
 │   ├── agents/              # 五类专业行研角色
@@ -161,7 +170,10 @@ eco-research-copilot/
 │   ├── ui/                  # 前端辅助（项目扫描 / 指标计算 / 图表渲染）
 │   └── utils/               # 配置 / 日志 / 数据库 / 校验 / LLM 调用工具
 ├── frameworks/              # 行研框架插件（YAML 配置）
+├── skills/                  # Skill 规范文档（信源评级 / 图表规范，注入 prompt）
+├── docs/                    # 架构说明 + 迁移计划 + 界面截图
 ├── projects/                # 运行时产物（每次调研的日志 + Word 报告，已 gitignore）
+├── data/                    # 指标库 SQLite 落盘（数据飞轮，已 gitignore）
 ├── .env.example             # 环境变量模板
 └── requirements.txt
 ```

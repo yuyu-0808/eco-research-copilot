@@ -1,7 +1,7 @@
 """FastAPI 后端入口：组装 API 路由 + WebSocket + CORS + 鉴权 + 统一异常处理。
 
-启动：uvicorn server.main:app --reload
-Swagger 文档：http://localhost:8000/docs
+启动：uvicorn server.main:app --reload --port 8010
+Swagger 文档：http://localhost:8010/docs
 """
 
 import traceback
