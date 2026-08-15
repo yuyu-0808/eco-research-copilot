@@ -10,6 +10,8 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.shared import OxmlElement, qn
 from docx.opc.constants import RELATIONSHIP_TYPE
 
+from src.utils.config import Config
+
 
 class DocxWriter:
     # 学术论文格式常量
@@ -275,15 +277,20 @@ class DocxWriter:
 
     # ---------- 券商研报排版（封面 / 目录 / 页眉页脚 / 数据附表） ----------
     def _setup_header_footer(self, doc, title: str):
-        """页眉=报告标题，页脚=居中页码。"""
+        """页眉=自定义页眉或报告标题，页脚=自定义页脚或居中页码。"""
         section = doc.sections[0]
+        header_text = Config.REPORT_HEADER or title
         hp = section.header.paragraphs[0]
         hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = hp.add_run(title)
+        run = hp.add_run(header_text)
         self._set_run_font(run, size=9, cn=self.CN_FONT, color="8B92AE")
         fp = section.footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        self._add_page_number(fp)
+        if Config.REPORT_FOOTER:
+            fr = fp.add_run(Config.REPORT_FOOTER)
+            self._set_run_font(fr, size=9, cn=self.CN_FONT, color="8B92AE")
+        else:
+            self._add_page_number(fp)
 
     def _add_page_number(self, paragraph):
         """在段落里插入 PAGE 字段（自动页码）。"""
@@ -301,11 +308,22 @@ class DocxWriter:
         run._r.append(fld_end)
 
     def _add_cover(self, doc, ai_data: dict):
-        """封面页：报告标题 + 副标题 + 日期 + 免责声明。"""
+        """封面页：Logo（可选）+ 报告标题 + 副标题 + 日期 + 免责声明。"""
         title = ai_data.get("report_title", "行业研究报告")
-        for _ in range(3):
+        for _ in range(2):
             p = doc.add_paragraph()
             self._set_para(p, first_indent_chars=0)
+
+        # 自定义 Logo（若配置且文件存在）
+        logo = (Config.REPORT_LOGO or "").strip()
+        if logo and os.path.exists(logo):
+            try:
+                p = doc.add_paragraph()
+                self._set_para(p, align=WD_ALIGN_PARAGRAPH.CENTER, first_indent_chars=0, space_after=14)
+                run = p.add_run()
+                run.add_picture(logo, width=Inches(1.6))
+            except Exception:
+                pass
 
         p = doc.add_paragraph()
         self._set_para(p, align=WD_ALIGN_PARAGRAPH.CENTER, first_indent_chars=0, space_after=18)
@@ -332,7 +350,7 @@ class DocxWriter:
 
         p = doc.add_paragraph()
         self._set_para(p, align=WD_ALIGN_PARAGRAPH.JUSTIFY, first_indent_chars=0, space_after=0)
-        disclaimer = (
+        disclaimer = Config.REPORT_DISCLAIMER or (
             "本报告由 Eco-Research Copilot 自动生成，仅供研究参考，不构成任何投资建议。"
             "报告数据来自公开信源，虽经多级代码校验，仍可能存在遗漏或偏差，使用者应自行核实。"
         )

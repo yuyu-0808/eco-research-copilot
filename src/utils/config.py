@@ -38,6 +38,12 @@ class Config:
     # 人机协同模式：auto（全自动，默认）/ manual（三阶段确认：框架→素材→终稿）
     REVIEW_MODE = os.getenv("REVIEW_MODE", "auto")
 
+    # 报告模板自定义（Word / PDF 通用）
+    REPORT_DISCLAIMER = os.getenv("REPORT_DISCLAIMER", "")  # 免责声明（空 = 用内置默认）
+    REPORT_HEADER = os.getenv("REPORT_HEADER", "")          # 页眉文本（空 = 用报告标题）
+    REPORT_FOOTER = os.getenv("REPORT_FOOTER", "")          # 页脚文本（空 = 用自动页码）
+    REPORT_LOGO = os.getenv("REPORT_LOGO", "")              # Logo 图片路径（空 = 不显示）
+
     @classmethod
     def validate(cls):
         """启动时自检密钥是否完整"""

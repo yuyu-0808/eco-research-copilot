@@ -93,6 +93,21 @@ export default function Settings() {
         </Field>
       </Group>
 
+      <Group title="报告模板（Word / PDF 通用）">
+        <Field label="免责声明（留空用内置默认）">
+          <textarea rows={2} value={cfg.report_disclaimer} onChange={(e) => set('report_disclaimer', e.target.value)} placeholder="自定义报告封面免责声明文案" />
+        </Field>
+        <Field label="页眉文本（留空用报告标题）">
+          <input value={cfg.report_header} onChange={(e) => set('report_header', e.target.value)} placeholder="如：内部研究 · 仅供交流" />
+        </Field>
+        <Field label="页脚文本（留空用自动页码）">
+          <input value={cfg.report_footer} onChange={(e) => set('report_footer', e.target.value)} placeholder="如：© 2026 Eco-Research" />
+        </Field>
+        <Field label="Logo 图片路径（留空不显示）">
+          <input value={cfg.report_logo} onChange={(e) => set('report_logo', e.target.value)} placeholder="如：C:/path/to/logo.png" />
+        </Field>
+      </Group>
+
       <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
         <button className="btn primary" onClick={save} disabled={saving}>
           {saving ? (<><span className="spin" /> 保存中…</>) : '保存配置'}

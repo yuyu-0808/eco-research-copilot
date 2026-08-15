@@ -25,3 +25,7 @@ ddgs
 # 文档生成
 python-docx
 requests
+
+# PDF 导出（reportlab 渲染 + markdown 解析）
+reportlab
+markdown

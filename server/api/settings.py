@@ -30,6 +30,10 @@ _FIELDS = {
     "report_mode": ("REPORT_MODE", str),
     "review_mode": ("REVIEW_MODE", str),
     "stage_retry": ("STAGE_RETRY", int),
+    "report_disclaimer": ("REPORT_DISCLAIMER", str),
+    "report_header": ("REPORT_HEADER", str),
+    "report_footer": ("REPORT_FOOTER", str),
+    "report_logo": ("REPORT_LOGO", str),
 }
 
 # 密钥字段（明文不返回，仅返回是否已配置）
@@ -54,6 +58,10 @@ def get_settings():
         "report_mode": Config.REPORT_MODE,
         "review_mode": Config.REVIEW_MODE,
         "stage_retry": Config.STAGE_RETRY,
+        "report_disclaimer": Config.REPORT_DISCLAIMER,
+        "report_header": Config.REPORT_HEADER,
+        "report_footer": Config.REPORT_FOOTER,
+        "report_logo": Config.REPORT_LOGO,
     })
 
 
