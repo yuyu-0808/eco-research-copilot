@@ -12,6 +12,7 @@ from .evidence import EvidenceRecord, TIER_LABEL
 from .source_grade import source_grade
 from .normalizer import normalize_value
 from .investment_checks import run_investment_checks
+from .metrics_store import cross_validate as historical_cross
 
 _TIER_RANK = {"A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "F": 1, "": 0}
 
@@ -108,6 +109,11 @@ def validate(plan_data: dict, evidence: list) -> dict:
     # 投研专属校验（财务勾稽 / 行业区间 / 时间序列 / 多源偏差），仅预警不拦截
     framework_key = (plan_data or {}).get("framework_key", "")
     checks = run_investment_checks(evidence, framework_key)
+
+    # 历史指标库交叉验证（数据飞轮）：同指标同年份与历史值偏差超阈值 → 待核实
+    hist_issues = historical_cross(framework_key, evidence)
+    checks["historical_cross"] = hist_issues
+    checks["warnings"] = checks["warnings"] + hist_issues
 
     is_pass = (not reasons) and (not tier_gaps)
     reasons.extend(tier_gaps)

@@ -9,6 +9,7 @@ import os
 from src.orchestrator import ResearchOrchestrator
 from src.utils.checkpoint import Checkpoint, PauseRequested
 from src.ui.helpers import save_result
+from src.utils.metrics_store import extract_metrics, save_metrics
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PROJECTS_DIR = os.path.join(ROOT_DIR, "projects")
@@ -69,3 +70,15 @@ def _persist_result(project_dir: str, project_id: str, topic: str, orchestrator)
         "trace": state.get("trace", {}),
     }
     save_result(project_dir, project_id, topic, final_result)
+
+    # 数据飞轮：把通过校验的核心指标沉淀到行业指标库（失败不阻断）
+    try:
+        framework_key = plan_data.get("framework_key", "")
+        entries = extract_metrics(verify_data.get("evidence", []), framework_key)
+        added = save_metrics(framework_key, entries, report_id=project_id)
+        if added:
+            orchestrator.logger.log_event(
+                "指标库", "SUCCESS", f"沉淀 {added} 条核心指标到「{framework_key}」指标库"
+            )
+    except Exception as e:
+        orchestrator.logger.log_event("指标库", "WARNING", f"指标沉淀失败（不影响报告）: {e}")

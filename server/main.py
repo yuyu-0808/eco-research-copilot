@@ -7,7 +7,7 @@ Swagger 文档：http://localhost:8000/docs
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from server.api import projects, research, review
+from server.api import projects, research, review, metrics
 from server import ws
 
 app = FastAPI(title="Eco-Research Copilot API", version="1.0.0")
@@ -24,6 +24,7 @@ app.add_middleware(
 app.include_router(projects.router)
 app.include_router(research.router)
 app.include_router(review.router)
+app.include_router(metrics.router)
 app.include_router(ws.router)
 
 
