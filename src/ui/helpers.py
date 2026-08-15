@@ -215,6 +215,8 @@ def list_projects():
             "dir": d,
             "resumable": resumable,
             "checkpoint_status": ck_status,
+            "error": (ck_state or {}).get("error", ""),
+            "archived": bool((ck_state or {}).get("archived", False)),
         })
     projects.sort(key=lambda p: p["id"], reverse=True)
     return projects

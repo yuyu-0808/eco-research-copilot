@@ -20,6 +20,7 @@ from src.ui.helpers import (
 from src.utils import db
 from src.utils.checkpoint import Checkpoint
 from server.workers import queue
+from server.workers.runner import run_research
 from server.response import ok
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -32,9 +33,23 @@ def _dir(project_id: str) -> str:
     return d
 
 
+def _new_project_id() -> str:
+    """生成不冲突的项目 ID（时间戳 + 撞车时加序号后缀）。"""
+    base = datetime.now().strftime('%Y%m%d_%H%M%S')
+    new_id = f"Project_{base}"
+    i = 1
+    while os.path.exists(os.path.join(PROJECTS_DIR, new_id)):
+        new_id = f"Project_{base}_{i}"
+        i += 1
+    return new_id
+
+
 @router.get("")
-def get_projects():
-    return ok({"projects": list_projects(), "metrics": dashboard_metrics()})
+def get_projects(include_archived: bool = False):
+    projects = list_projects()
+    if not include_archived:
+        projects = [p for p in projects if not p.get("archived")]
+    return ok({"projects": projects, "metrics": dashboard_metrics()})
 
 
 @router.post("")
@@ -44,7 +59,7 @@ def create_project(payload: dict = None):
     if not topic:
         raise HTTPException(400, "topic 不能为空")
     framework_key = ((payload or {}).get("framework_key") or "").strip()
-    project_id = f"Project_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    project_id = _new_project_id()
     project_dir = os.path.join(PROJECTS_DIR, project_id)
     os.makedirs(project_dir, exist_ok=True)
     # 用户显式选择的框架 key 写入 checkpoint（空 = 自动匹配）
@@ -76,3 +91,78 @@ def delete_project(project_id: str):
     queue.cancel(project_id)  # 若在跑，先从队列移除
     shutil.rmtree(d, ignore_errors=True)
     return ok({"deleted": project_id})
+
+
+@router.post("/{project_id}/rename")
+def rename_project(project_id: str, payload: dict = None):
+    """重命名项目（更新标题，目录 ID 不变）。"""
+    d = _dir(project_id)
+    topic = ((payload or {}).get("topic") or "").strip()
+    if not topic:
+        raise HTTPException(400, "topic 不能为空")
+    # 1. checkpoint 标题
+    ck = Checkpoint(d)
+    state = ck.load()
+    state["topic"] = topic
+    ck.save(state)
+    # 2. result.json 标题
+    result = load_result(d)
+    if result:
+        result["topic"] = topic
+        import json
+        with open(os.path.join(d, "result.json"), "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+    # 3. SQLite 元信息
+    db.project_update_topic(project_id, topic)
+    return ok({"project_id": project_id, "topic": topic})
+
+
+@router.post("/{project_id}/duplicate")
+def duplicate_project(project_id: str):
+    """复制项目：把项目目录整体复制为一个新项目。"""
+    d = _dir(project_id)
+    new_id = _new_project_id()
+    new_dir = os.path.join(PROJECTS_DIR, new_id)
+    shutil.copytree(d, new_dir)
+    # 复制后重置运行状态，避免误判为「正在运行」
+    ck = Checkpoint(new_dir)
+    state = ck.load()
+    state["status"] = "paused"
+    state["pause_requested"] = False
+    ck.save(state)
+    db.project_upsert(new_id, topic=state.get("topic", ""), status="paused",
+                      checkpoint_path=os.path.join(new_dir, "checkpoint.json"))
+    return ok({"project_id": new_id, "source": project_id})
+
+
+@router.post("/{project_id}/archive")
+def archive_project(project_id: str):
+    """归档项目（从默认列表隐藏，可取消归档）。"""
+    d = _dir(project_id)
+    Checkpoint(d).set_archived(True)
+    db.project_archive(project_id, True)
+    return ok({"project_id": project_id, "archived": True})
+
+
+@router.post("/{project_id}/unarchive")
+def unarchive_project(project_id: str):
+    """取消归档。"""
+    d = _dir(project_id)
+    Checkpoint(d).set_archived(False)
+    db.project_archive(project_id, False)
+    return ok({"project_id": project_id, "archived": False})
+
+
+@router.post("/{project_id}/retry")
+def retry_project(project_id: str):
+    """一键重试：从断点续跑失败的项目。"""
+    d = _dir(project_id)
+    state = load_checkpoint(d) or {}
+    topic = state.get("topic", "")
+    if not topic:
+        raise HTTPException(400, "项目缺少课题，无法重试")
+    ck = Checkpoint(d)
+    ck.clear_pause()
+    if not queue.submit(project_id, run_research, project_id, topic, True):
+        raise HTTPException(409, "该项目已有任务在运行")
+    return ok({"project_id": project_id, "status": "resumed"})

@@ -37,6 +37,8 @@ class Checkpoint:
             "current_stage": "architect",
             "review_stage": "",    # 人工确认检查点："" | framework | materials | draft
             "framework_key": "",   # 用户选择的行业框架 key；空 = 自动匹配
+            "error": "",           # 失败原因（status=failed 时记录）
+            "archived": False,     # 是否已归档
             "stages": {s: {"status": "pending", "data": None} for s in self.STAGES},
         }
 
@@ -57,6 +59,8 @@ class Checkpoint:
         state.setdefault("current_stage", "architect")
         state.setdefault("review_stage", "")
         state.setdefault("framework_key", "")
+        state.setdefault("error", "")
+        state.setdefault("archived", False)
         stages = state.setdefault("stages", {})
         for s in self.STAGES:
             stages.setdefault(s, {"status": "pending", "data": None})
@@ -153,4 +157,17 @@ class Checkpoint:
     def set_status(self, status: str) -> None:
         state = self.load()
         state["status"] = status
+        self.save(state)
+
+    def set_error(self, error: str) -> None:
+        """记录失败原因并置 status=failed。"""
+        state = self.load()
+        state["status"] = "failed"
+        state["error"] = error
+        self.save(state)
+
+    def set_archived(self, archived: bool = True) -> None:
+        """设置归档状态。"""
+        state = self.load()
+        state["archived"] = bool(archived)
         self.save(state)

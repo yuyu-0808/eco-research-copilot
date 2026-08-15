@@ -135,7 +135,7 @@ class ResearchOrchestrator:
             raise
 
         except Exception as e:
-            self.ckpt.set_status("failed")
+            self.ckpt.set_error(str(e))
             self.logger.log_event("Orchestrator", "ERROR", f"🚨 流水线异常中断: {e}")
             raise e
 

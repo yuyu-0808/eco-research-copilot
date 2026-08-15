@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS projects (
     n_charts INTEGER DEFAULT 0,
     n_tables INTEGER DEFAULT 0,
     duration_sec REAL DEFAULT 0,
+    archived INTEGER DEFAULT 0,
     checkpoint_path TEXT
 );
 
@@ -98,16 +99,19 @@ def _ensure_init():
             conn.close()
         _initialized = True
         _migrate_metrics_json()
-        _migrate_add_duration()
+        _migrate_projects_columns()
 
 
-def _migrate_add_duration():
-    """为旧库补 duration_sec 列（若 projects 表已存在但缺列）。"""
+def _migrate_projects_columns():
+    """为旧库补 projects 表缺失的列（duration_sec / archived）。"""
     conn = _connect()
     try:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(projects)")]
-        if cols and "duration_sec" not in cols:
-            conn.execute("ALTER TABLE projects ADD COLUMN duration_sec REAL DEFAULT 0")
+        if cols:
+            if "duration_sec" not in cols:
+                conn.execute("ALTER TABLE projects ADD COLUMN duration_sec REAL DEFAULT 0")
+            if "archived" not in cols:
+                conn.execute("ALTER TABLE projects ADD COLUMN archived INTEGER DEFAULT 0")
             conn.commit()
     finally:
         conn.close()
@@ -273,6 +277,34 @@ def projects_list() -> list:
     conn = _connect()
     try:
         return [dict(r) for r in conn.execute("SELECT * FROM projects ORDER BY created_at DESC")]
+    finally:
+        conn.close()
+
+
+def project_archive(project_id: str, archived: bool = True) -> None:
+    """设置项目的归档状态。"""
+    _ensure_init()
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE projects SET archived=?, updated_at=? WHERE id=?",
+            (int(bool(archived)), datetime.now().isoformat(timespec="seconds"), project_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def project_update_topic(project_id: str, topic: str) -> None:
+    """更新项目标题（重命名）。"""
+    _ensure_init()
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE projects SET topic=?, updated_at=? WHERE id=?",
+            (topic, datetime.now().isoformat(timespec="seconds"), project_id),
+        )
+        conn.commit()
     finally:
         conn.close()
 

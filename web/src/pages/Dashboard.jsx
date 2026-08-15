@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiGet } from '../api.js'
+import { apiGet, apiPost } from '../api.js'
 import { Kpi, StatusBadge } from '../components.jsx'
 
 function fmtDuration(sec) {
@@ -21,21 +21,44 @@ export default function Dashboard({ go }) {
   const [data, setData] = useState(null)
   const [stats, setStats] = useState(null)
   const [err, setErr] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
 
-  useEffect(() => {
-    apiGet('/api/projects')
+  function load() {
+    apiGet(`/api/projects${showArchived ? '?include_archived=1' : ''}`)
       .then(setData)
       .catch((e) => setErr(e.message))
-    apiGet('/api/stats')
-      .then(setStats)
-      .catch(() => {})
-  }, [])
+  }
+  useEffect(() => {
+    load()
+    apiGet('/api/stats').then(setStats).catch(() => {})
+  }, [showArchived])
+
+  async function act(path, body) {
+    try {
+      await apiPost(path, body)
+      load()
+    } catch (e) {
+      setErr(e.message)
+    }
+  }
+
+  async function rename(p) {
+    const name = window.prompt('新的项目名称：', p.topic)
+    if (name && name.trim()) {
+      await act(`/api/projects/${p.id}/rename`, { topic: name.trim() })
+    }
+  }
+
+  async function retry(p) {
+    await act(`/api/projects/${p.id}/retry`)
+    go(`/report/${p.id}`)
+  }
 
   if (err) return <div className="card">加载失败：{err}</div>
   if (!data) return <div className="empty"><span className="spin" /> 加载中…</div>
 
-  const { projects, metrics } = data
-  const m = metrics || {}
+  const { projects } = data
+  const m = data.metrics || {}
   const s = stats || {}
 
   return (
@@ -56,24 +79,49 @@ export default function Dashboard({ go }) {
         <Kpi label="LLM 调用次数" value={s.llm_calls ?? 0} unit="次" />
       </div>
 
-      <div className="sec-title">调研项目</div>
+      <div className="sec-title" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        调研项目
+        <div style={{ flex: 1 }} />
+        <button className="btn" onClick={() => setShowArchived(!showArchived)} style={{ fontSize: 12 }}>
+          {showArchived ? '返回活动项目' : '查看归档'}
+        </button>
+      </div>
+
       {projects.length === 0 ? (
-        <div className="empty">还没有项目，点左侧「新建调研」开始第一个课题。</div>
+        <div className="empty">{showArchived ? '没有归档项目。' : '还没有项目，点左侧「新建调研」开始第一个课题。'}</div>
       ) : (
         <div className="proj-list">
           {projects.map((p) => (
             <div className="proj-row" key={p.id}>
               <div className="proj-main">
-                <div className="proj-topic">{p.topic || p.id}</div>
+                <div className="proj-topic">
+                  {p.topic || p.id}
+                  {p.archived ? <span className="badge" style={{ marginLeft: '0.5rem' }}>已归档</span> : null}
+                </div>
                 <div className="proj-meta">
                   {p.relative_time || '—'} · 耗时 {fmtDuration(p.duration || 0)} · {p.n_charts} 图 · {p.n_tables} 表
                 </div>
+                {p.error && (
+                  <div className="proj-meta" style={{ color: 'var(--danger)' }}>
+                    ⚠ {p.error}
+                  </div>
+                )}
               </div>
               <StatusBadge status={p.status} />
+              {p.error && (
+                <button className="btn primary" onClick={() => retry(p)}>重试</button>
+              )}
               {p.has_result || p.has_docx ? (
                 <button className="btn" onClick={() => go(`/report/${p.id}`)}>查看报告</button>
               ) : (
                 <button className="btn" onClick={() => go(`/report/${p.id}`)}>查看进度</button>
+              )}
+              <button className="btn" onClick={() => act(`/api/projects/${p.id}/duplicate`)}>复制</button>
+              <button className="btn" onClick={() => rename(p)}>重命名</button>
+              {p.archived ? (
+                <button className="btn" onClick={() => act(`/api/projects/${p.id}/unarchive`)}>取消归档</button>
+              ) : (
+                <button className="btn" onClick={() => act(`/api/projects/${p.id}/archive`)}>归档</button>
               )}
             </div>
           ))}
