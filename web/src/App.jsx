@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard.jsx'
 import NewResearch from './pages/NewResearch.jsx'
 import Report from './pages/Report.jsx'
 import Metrics from './pages/Metrics.jsx'
+import Settings from './pages/Settings.jsx'
 
 function parseHash() {
   const h = window.location.hash.replace(/^#/, '') || '/'
@@ -11,6 +12,7 @@ function parseHash() {
   if (parts[0] === 'new') return { view: 'new' }
   if (parts[0] === 'report') return { view: 'report', id: parts[1] }
   if (parts[0] === 'metrics') return { view: 'metrics' }
+  if (parts[0] === 'settings') return { view: 'settings' }
   return { view: 'dashboard' }
 }
 
@@ -42,12 +44,14 @@ export default function App() {
         <div className={navCls('dashboard')} onClick={() => go('/')}>工作台</div>
         <div className={navCls('new')} onClick={() => go('/new')}>新建调研</div>
         <div className={navCls('metrics')} onClick={() => go('/metrics')}>指标库</div>
+        <div className={navCls('settings')} onClick={() => go('/settings')}>设置</div>
       </aside>
       <main className="main">
         {route.view === 'dashboard' && <Dashboard go={go} />}
         {route.view === 'new' && <NewResearch go={go} />}
         {route.view === 'report' && <Report id={route.id} />}
         {route.view === 'metrics' && <Metrics />}
+        {route.view === 'settings' && <Settings />}
       </main>
     </div>
   )
