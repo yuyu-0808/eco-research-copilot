@@ -6,7 +6,7 @@ load_result / dashboard_metrics），与 Streamlit 端共享同一套 projects/ 
 
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 
@@ -85,9 +85,44 @@ def get_project(project_id: str):
 @router.delete("/{project_id}")
 def delete_project(project_id: str):
     d = _dir(project_id)
-    queue.cancel(project_id)  # 若在跑，先从队列移除
+    ck = Checkpoint(d)
+    state = ck.load()
+    # 任务仍在运行或暂停：后台线程可能还在写 checkpoint，直接删目录会被 save() 的
+    # os.makedirs 复活（僵尸项目）。先请求停止并拒绝删除，待任务彻底停止后再删。
+    if queue.is_running(project_id) or state.get("status") in ("running", "paused"):
+        ck.request_stop()
+        queue.cancel(project_id)
+        raise HTTPException(409, "任务仍在运行，已请求停止，请稍后再删除")
     shutil.rmtree(d, ignore_errors=True)
+    db.project_delete(project_id)
     return ok({"deleted": project_id})
+
+
+@router.post("/cleanup")
+def cleanup_projects(payload: dict = None):
+    """清理 N 天前创建且已结束（非运行/暂停中）的项目，释放磁盘与 SQLite。"""
+    days = int((payload or {}).get("days", 30) or 30)
+    cutoff = datetime.now() - timedelta(days=days)
+    deleted = 0
+    for p in list_projects():
+        pid = p.get("id", "")
+        status = p.get("status", "")
+        # 跳过仍在运行 / 暂停中的项目
+        if queue.is_running(pid) or status in ("running", "paused"):
+            continue
+        # 解析创建时间（目录名 Project_YYYYMMDD_HHMMSS）
+        try:
+            created = datetime.strptime(p.get("created_at", ""), "%Y%m%d_%H%M%S")
+        except ValueError:
+            continue
+        if created >= cutoff:
+            continue
+        d = p.get("dir", "")
+        if d:
+            shutil.rmtree(d, ignore_errors=True)
+        db.project_delete(pid)
+        deleted += 1
+    return ok({"deleted": deleted})
 
 
 @router.post("/{project_id}/rename")

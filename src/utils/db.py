@@ -4,7 +4,7 @@
 JSON 文件，SQLite 只存轻量元数据与指标，二者通过 project_id 关联映射。
 
 并发：后台执行线程（APScheduler 线程池）与 API 线程都会访问，采用 WAL 模式 +
-每操作独立连接，支持并发读写；写操作用模块级锁串行化。
+每操作独立连接（timeout=30），并发写由 SQLite 自身串行化，无需额外加锁。
 """
 
 import os
@@ -342,6 +342,18 @@ def project_archive(project_id: str, archived: bool = True) -> None:
             "UPDATE projects SET archived=?, updated_at=? WHERE id=?",
             (int(bool(archived)), datetime.now().isoformat(timespec="seconds"), project_id),
         )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def project_delete(project_id: str) -> None:
+    """删除项目元信息与 token 统计（磁盘目录删除后同步清理，避免 SQLite 残留）。"""
+    _ensure_init()
+    conn = _connect()
+    try:
+        conn.execute("DELETE FROM projects WHERE id=?", (project_id,))
+        conn.execute("DELETE FROM stats WHERE project_id=?", (project_id,))
         conn.commit()
     finally:
         conn.close()
