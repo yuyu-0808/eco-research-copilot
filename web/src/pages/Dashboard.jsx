@@ -11,14 +11,24 @@ function fmtDuration(sec) {
   return `${h}h ${m % 60}m`
 }
 
+function fmtToken(n) {
+  if (!n) return '0'
+  if (n >= 10000) return `${(n / 10000).toFixed(1)}万`
+  return `${n}`
+}
+
 export default function Dashboard({ go }) {
   const [data, setData] = useState(null)
+  const [stats, setStats] = useState(null)
   const [err, setErr] = useState('')
 
   useEffect(() => {
     apiGet('/api/projects')
       .then(setData)
       .catch((e) => setErr(e.message))
+    apiGet('/api/stats')
+      .then(setStats)
+      .catch(() => {})
   }, [])
 
   if (err) return <div className="card">加载失败：{err}</div>
@@ -26,6 +36,7 @@ export default function Dashboard({ go }) {
 
   const { projects, metrics } = data
   const m = metrics || {}
+  const s = stats || {}
 
   return (
     <div>
@@ -35,6 +46,14 @@ export default function Dashboard({ go }) {
         <Kpi label="已完成" value={m.completed ?? 0} unit="个" />
         <Kpi label="生成图表" value={m.charts ?? 0} unit="张" />
         <Kpi label="数据质检通过率" value={m.qa_rate ?? 0} unit="%" />
+      </div>
+
+      <div className="sec-title">运行统计</div>
+      <div className="kpi-grid">
+        <Kpi label="任务成功率" value={s.success_rate ?? 0} unit="%" />
+        <Kpi label="平均耗时" value={fmtDuration(s.avg_duration_sec ?? 0)} />
+        <Kpi label="Token 消耗" value={fmtToken(s.total_tokens ?? 0)} />
+        <Kpi label="LLM 调用次数" value={s.llm_calls ?? 0} unit="次" />
       </div>
 
       <div className="sec-title">调研项目</div>

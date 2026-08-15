@@ -7,8 +7,26 @@ import re
 import time
 
 from src.utils.config import Config
+from src.utils import db
 
 _last_api_call_time = 0.0
+
+
+def _record_usage(logger, agent_name, response):
+    """把每次 LLM 调用的 Token 消耗写入统计表（失败静默，不影响主流程）。"""
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    try:
+        db.stats_record_tokens(
+            getattr(logger, "project_name", ""),
+            agent_name,
+            getattr(usage, "prompt_tokens", 0) or 0,
+            getattr(usage, "completion_tokens", 0) or 0,
+            getattr(usage, "total_tokens", 0) or 0,
+        )
+    except Exception:
+        pass
 
 
 def fix_json(broken_json: str):
@@ -89,6 +107,7 @@ def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retr
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature
             )
+            _record_usage(logger, agent_name, response)
             raw = response.choices[0].message.content
 
             if need_json:
@@ -117,6 +136,7 @@ def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retr
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature
             )
+            _record_usage(logger, agent_name, response)
             raw = response.choices[0].message.content
 
             if need_json:

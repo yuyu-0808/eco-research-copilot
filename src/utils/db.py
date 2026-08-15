@@ -60,8 +60,20 @@ CREATE TABLE IF NOT EXISTS projects (
     has_docx INTEGER DEFAULT 0,
     n_charts INTEGER DEFAULT 0,
     n_tables INTEGER DEFAULT 0,
+    duration_sec REAL DEFAULT 0,
     checkpoint_path TEXT
 );
+
+CREATE TABLE IF NOT EXISTS stats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT,
+    agent TEXT,
+    prompt_tokens INTEGER DEFAULT 0,
+    completion_tokens INTEGER DEFAULT 0,
+    total_tokens INTEGER DEFAULT 0,
+    created_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_stats_project ON stats(project_id);
 
 CREATE TABLE IF NOT EXISTS config (
     key TEXT PRIMARY KEY,
@@ -86,6 +98,19 @@ def _ensure_init():
             conn.close()
         _initialized = True
         _migrate_metrics_json()
+        _migrate_add_duration()
+
+
+def _migrate_add_duration():
+    """为旧库补 duration_sec 列（若 projects 表已存在但缺列）。"""
+    conn = _connect()
+    try:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(projects)")]
+        if cols and "duration_sec" not in cols:
+            conn.execute("ALTER TABLE projects ADD COLUMN duration_sec REAL DEFAULT 0")
+            conn.commit()
+    finally:
+        conn.close()
 
 
 def _migrate_metrics_json():
@@ -209,6 +234,7 @@ def project_upsert(project_id: str, **fields) -> None:
         "has_docx": int(bool(fields.get("has_docx", False))),
         "n_charts": int(fields.get("n_charts", 0) or 0),
         "n_tables": int(fields.get("n_tables", 0) or 0),
+        "duration_sec": float(fields.get("duration_sec", 0) or 0),
         "checkpoint_path": fields.get("checkpoint_path", ""),
         "updated_at": now,
     }
@@ -216,12 +242,13 @@ def project_upsert(project_id: str, **fields) -> None:
     try:
         conn.execute(
             """INSERT INTO projects
-               (id, topic, status, created_at, updated_at, has_result, has_docx, n_charts, n_tables, checkpoint_path)
-               VALUES (:id, :topic, :status, :updated_at, :updated_at, :has_result, :has_docx, :n_charts, :n_tables, :checkpoint_path)
+               (id, topic, status, created_at, updated_at, has_result, has_docx, n_charts, n_tables, duration_sec, checkpoint_path)
+               VALUES (:id, :topic, :status, :updated_at, :updated_at, :has_result, :has_docx, :n_charts, :n_tables, :duration_sec, :checkpoint_path)
                ON CONFLICT(id) DO UPDATE SET
                  topic=excluded.topic, status=excluded.status, updated_at=excluded.updated_at,
                  has_result=excluded.has_result, has_docx=excluded.has_docx,
-                 n_charts=excluded.n_charts, n_tables=excluded.n_tables, checkpoint_path=excluded.checkpoint_path""",
+                 n_charts=excluded.n_charts, n_tables=excluded.n_tables,
+                 duration_sec=excluded.duration_sec, checkpoint_path=excluded.checkpoint_path""",
             data,
         )
         conn.commit()
@@ -246,6 +273,66 @@ def projects_list() -> list:
     conn = _connect()
     try:
         return [dict(r) for r in conn.execute("SELECT * FROM projects ORDER BY created_at DESC")]
+    finally:
+        conn.close()
+
+
+# ----------------------------------------------------------------------
+# 统计（Token 消耗 / 任务耗时）
+# ----------------------------------------------------------------------
+def stats_record_tokens(project_id: str, agent: str, prompt_tokens: int,
+                        completion_tokens: int, total_tokens: int) -> None:
+    """记录一次 LLM 调用的 Token 消耗。"""
+    if not total_tokens:
+        return
+    _ensure_init()
+    conn = _connect()
+    try:
+        conn.execute(
+            """INSERT INTO stats (project_id, agent, prompt_tokens, completion_tokens, total_tokens, created_at)
+               VALUES (?,?,?,?,?,?)""",
+            (project_id, agent, int(prompt_tokens or 0), int(completion_tokens or 0),
+             int(total_tokens or 0), datetime.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def stats_summary() -> dict:
+    """聚合统计：项目数 / 成功率 / 平均耗时 / Token 消耗 / 图表数。"""
+    _ensure_init()
+    conn = _connect()
+    try:
+        proj = conn.execute(
+            """SELECT COUNT(*) AS total,
+                      COALESCE(SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END), 0) AS completed,
+                      COALESCE(AVG(CASE WHEN status='completed' AND duration_sec > 0 THEN duration_sec END), 0) AS avg_duration,
+                      COALESCE(SUM(n_charts), 0) AS charts,
+                      COALESCE(SUM(n_tables), 0) AS tables
+               FROM projects"""
+        ).fetchone()
+        tok = conn.execute(
+            """SELECT COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                      COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                      COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                      COUNT(*) AS calls
+               FROM stats"""
+        ).fetchone()
+        total = proj["total"] or 0
+        completed = proj["completed"] or 0
+        return {
+            "total_projects": total,
+            "completed": completed,
+            "success_rate": round(completed / total * 100) if total else 0,
+            "avg_duration_sec": round(proj["avg_duration"] or 0, 1),
+            "total_charts": proj["charts"] or 0,
+            "total_tables": proj["tables"] or 0,
+            "total_tokens": tok["total_tokens"] or 0,
+            "prompt_tokens": tok["prompt_tokens"] or 0,
+            "completion_tokens": tok["completion_tokens"] or 0,
+            "llm_calls": tok["calls"] or 0,
+        }
     finally:
         conn.close()
 

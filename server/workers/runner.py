@@ -5,6 +5,7 @@
 """
 
 import os
+import time
 
 from src.orchestrator import ResearchOrchestrator
 from src.utils.checkpoint import Checkpoint, PauseRequested
@@ -29,8 +30,9 @@ def run_research(project_id: str, topic: str, resume: bool = False) -> None:
 
     orchestrator = ResearchOrchestrator(project_name=project_id, resume=resume)
     try:
+        t0 = time.time()
         result = orchestrator.run(topic)
-        _persist_result(project_dir, project_id, topic, orchestrator)
+        _persist_result(project_dir, project_id, topic, orchestrator, duration_sec=time.time() - t0)
     except PauseRequested:
         # 已暂停：checkpoint 记录 paused 状态，等 resume 续跑，不落 result
         return
@@ -39,7 +41,8 @@ def run_research(project_id: str, topic: str, resume: bool = False) -> None:
         raise
 
 
-def _persist_result(project_dir: str, project_id: str, topic: str, orchestrator) -> None:
+def _persist_result(project_dir: str, project_id: str, topic: str, orchestrator,
+                    duration_sec: float = 0.0) -> None:
     """把完整调研结果组装成 result.json 落盘，供历史回看。"""
     ckpt = Checkpoint(project_dir)
     state = ckpt.load()
@@ -79,6 +82,7 @@ def _persist_result(project_dir: str, project_id: str, topic: str, orchestrator)
             has_result=True, has_docx=bool(docx_path),
             n_charts=len(structure.get("charts", [])),
             n_tables=len(structure.get("tables", [])),
+            duration_sec=duration_sec,
         )
     except Exception:
         pass

@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from server.api import projects, research, review, metrics, settings
+from server.api import projects, research, review, metrics, settings, stats
 from server import ws
 from server.response import ok, fail, code_for_status, CODE_UNAUTHORIZED, CODE_INTERNAL
 from server.security import access_token, verify_token
@@ -67,6 +67,7 @@ app.include_router(research.router)
 app.include_router(review.router)
 app.include_router(metrics.router)
 app.include_router(settings.router)
+app.include_router(stats.router)
 app.include_router(ws.router)
 
 
