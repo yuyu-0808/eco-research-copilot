@@ -1,13 +1,13 @@
 """结构化证据模型。
 
-与「一段纯文本带个来源」不同，这里把每一条证据落成强类型数据：
+把每一条证据落成强类型数据：
 claim / value / unit / period / source_tier / publisher / published_at /
 excerpt / section / question_id。
 
 用途：
 - 信源研究员采集时，先给每条信源打上 source_tier + publisher（原始素材）；
 - 事实稽核官提炼时，补全 claim / value / unit / period，并归属到 section/question_id；
-- 确定性校验器（validator）据此做「框架合规性 + 证据匹配度」双重校验；
+- 代码校验器（validator）据此做「框架合规性 + 证据匹配度」双重校验；
 - 前端溯源面板据此实现「点正文任意一句 → 弹出原文摘录与信源」。
 """
 

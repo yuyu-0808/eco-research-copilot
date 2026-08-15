@@ -16,8 +16,8 @@ class AuditorAgent:
 
     def verify_data(self, plan_data: dict, collect_result) -> dict:
         """
-        事实校验（确定性）：LLM 只负责把素材提炼并归属到必答问题，
-        「过没过」由 validator 的代码校验决定，不再由模型自评。
+        事实校验（代码级）：LLM 只负责把素材提炼并归属到必答问题，
+        「过没过」由 validator 的代码校验决定。
         """
         # 兼容：新版传 dict（含 evidence），旧版传纯文本
         if isinstance(collect_result, dict):
@@ -27,7 +27,7 @@ class AuditorAgent:
             raw_context = collect_result or ""
             raw_evidence = []
 
-        self.logger.log_event("事实稽核官", "START", "开始提炼证据并做确定性校验")
+        self.logger.log_event("事实稽核官", "START", "开始提炼证据并做代码校验")
 
         requirements = plan_data.get("research_requirements", [])
         topic = plan_data.get("topic", "")
@@ -38,7 +38,7 @@ class AuditorAgent:
         # 2. 合并：把信源元数据（tier/publisher）从采集结果回填到提炼证据
         evidence_list = self._merge_meta(extracted, raw_evidence)
 
-        # 3. 确定性校验（代码判定，模型无法改写结论）
+        # 3. 代码校验（由代码判定）
         result = validate(plan_data, evidence_list)
         is_pass = result["is_pass"]
 
@@ -49,11 +49,11 @@ class AuditorAgent:
             feedback = "；".join(result["reasons"]) or "证据不达标"
 
         if is_pass:
-            self.logger.log_event("事实稽核官", "SUCCESS", f"确定性校验通过，{len(evidence_list)} 条有效证据")
+            self.logger.log_event("事实稽核官", "SUCCESS", f"代码校验通过，{len(evidence_list)} 条有效证据")
         else:
             self.logger.log_event(
                 "事实稽核官", "ACTION",
-                f"确定性校验未通过（{len(result['reasons'])} 项不达标），打回补充检索"
+                f"代码校验未通过（{len(result['reasons'])} 项不达标），打回补充检索"
             )
 
         return {

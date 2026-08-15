@@ -209,19 +209,6 @@ header[data-testid="stHeader"] { background: transparent !important; }
 .cap-title::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--brand); flex-shrink:0; }
 .cap-desc { font-size:12.5px; color:var(--muted); margin-top:.32rem; line-height:1.55; }
 
-.compare { display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:stretch; margin:1.5rem 0 .5rem; }
-.compare-col { border-radius:14px; padding:1.05rem 1.2rem; border:1px solid var(--border); }
-.compare-bad { background:var(--surface-2); }
-.compare-good { background:var(--brand-soft); border-color:var(--brand); }
-.compare-head { font-weight:700; font-size:13px; margin-bottom:.55rem; }
-.compare-bad .compare-head { color:var(--muted); }
-.compare-good .compare-head { color:var(--brand-ink); }
-.compare ul { list-style:none; margin:0; padding:0; }
-.compare li { font-size:13px; color:var(--text); padding:.22rem 0; }
-.compare li .no { color:var(--danger); font-weight:700; margin-right:.3rem; }
-.compare li .yes { color:var(--success); font-weight:700; margin-right:.3rem; }
-.compare-vs { display:grid; place-items:center; font-weight:800; color:var(--faint); font-size:11px; letter-spacing:.06em; }
-
 .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:4rem 0 .4rem; }
 @media (max-width: 720px){ .kpi-grid{ grid-template-columns:repeat(2,1fr); } }
 .kpi { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:1.05rem 1.15rem; box-shadow:var(--shadow-sm); transition:transform .2s var(--ease), box-shadow .2s var(--ease); }
@@ -328,29 +315,6 @@ def hero_html():
     </div>
     """
 
-
-def compare_html():
-    return """
-    <div class="compare">
-      <div class="compare-col compare-bad">
-        <div class="compare-head">传统 AI 调研</div>
-        <ul>
-          <li><span class="no">✕</span>一本正经地编造数据</li>
-          <li><span class="no">✕</span>来源不明，无法核查</li>
-          <li><span class="no">✕</span>幻觉严重，结论不可信</li>
-        </ul>
-      </div>
-      <div class="compare-vs">VS</div>
-      <div class="compare-col compare-good">
-        <div class="compare-head">Eco-Research</div>
-        <ul>
-          <li><span class="yes">✓</span>只采信官方与权威信源</li>
-          <li><span class="yes">✓</span>每条结论可点击溯源</li>
-          <li><span class="yes">✓</span>搜不到证据就熔断</li>
-        </ul>
-      </div>
-    </div>
-    """
 
 
 def kpi_html(m):
@@ -574,9 +538,6 @@ def render_overview():
                                 "project_id": p["id"],
                                 "topic": p["topic"],
                             })
-
-    # 对比区（页底）
-    st.markdown(compare_html(), unsafe_allow_html=True)
 
 
 def _start_worker(project_id, project_dir, topic, resume=False):
@@ -936,7 +897,7 @@ def _render_trace_panel(data):
 
     stage_order = [
         ("architect", "① 课题架构 · 框架匹配"),
-        ("research_verify", "② 检索 + 确定性稽核"),
+        ("research_verify", "② 检索 + 代码稽核"),
         ("structure", "③ 结构化提炼"),
         ("write_audit", "④ 撰写 + 逻辑校验"),
         ("render", "⑤ 渲染排版"),

@@ -14,15 +14,15 @@ class ArchitectAgent:
 
     def generate_plan(self, user_topic: str) -> dict:
         """
-        内核替换：不再让 LLM 自由拆题，而是「内置行研框架兜底 + LLM 仅微调」。
+        内核：内置行研框架兜底 + LLM 仅微调。
 
         保证：
-        - 输出结构 100% 符合行研规范（框架兜底，不赌模型发挥）；
+        - 输出结构 100% 符合行研规范（框架兜底）；
         - LLM 完全失败时，仍能返回标准研究计划。
         """
         self.logger.log_event("课题架构师", "START", f"开始按行研框架拆解课题: {user_topic}")
 
-        # 1. 匹配内置框架，生成标准研究计划（纯确定性，不依赖 LLM）
+        # 1. 匹配内置框架，生成标准研究计划（纯规则，不依赖 LLM）
         framework = match_framework(user_topic)
         plan_data = build_plan(user_topic, framework)
         self.logger.log_event(

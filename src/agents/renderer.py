@@ -70,7 +70,7 @@ class RendererAgent:
         }}
         """
         structure = call_llm(self.client, self.model, self.logger, "结构提炼", prompt, need_json=True)
-        # 确定性纠偏：图表类型由规则校验，纠正 LLM 的自由选择
+        # 规则纠偏：图表类型由规则校验，纠正 LLM 的选择
         structure["charts"] = apply_chart_rules(structure.get("charts", []))
         self.logger.log_event(
             "结构提炼", "SUCCESS",
