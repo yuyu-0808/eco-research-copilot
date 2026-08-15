@@ -11,6 +11,7 @@ import os
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from src.ui.helpers import read_log, load_checkpoint, derive_stages, PROJECTS_DIR
+from server.security import verify_token
 
 router = APIRouter()
 
@@ -19,6 +20,12 @@ _POLL_SECONDS = 1.0
 
 @router.websocket("/ws/projects/{project_id}")
 async def ws_project(websocket: WebSocket, project_id: str):
+    # 鉴权：token 通过查询参数传入（WebSocket 握手无法带自定义 header）
+    token = websocket.query_params.get("token", "")
+    if not verify_token(token):
+        await websocket.close(code=4001)
+        return
+
     await websocket.accept()
     d = os.path.join(PROJECTS_DIR, project_id)
     sent_logs = 0  # 已推送的日志条数（增量推送）

@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from dotenv import set_key
 
 from src.utils.config import Config
+from server.response import ok
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -40,7 +41,7 @@ _SECRET_FIELDS = [
 
 @router.get("")
 def get_settings():
-    return {
+    return ok({
         "model_name": Config.MODEL_NAME,
         "backup_model": Config.BACKUP_MODEL,
         "base_url": Config.BASE_URL,
@@ -53,7 +54,7 @@ def get_settings():
         "report_mode": Config.REPORT_MODE,
         "review_mode": Config.REVIEW_MODE,
         "stage_retry": Config.STAGE_RETRY,
-    }
+    })
 
 
 @router.put("")
@@ -83,4 +84,4 @@ def update_settings(payload: dict = None):
 
     if not updated:
         raise HTTPException(400, "没有可更新的字段")
-    return {"updated": updated}
+    return ok({"updated": updated})

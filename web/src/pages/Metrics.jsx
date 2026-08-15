@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiGet } from '../api.js'
+import { apiGet, getToken } from '../api.js'
 
 const METRIC_LABEL = {
   revenue: '营业收入', net_profit: '净利润', gross_profit: '毛利', operating_cost: '营业成本',
@@ -22,13 +22,16 @@ export default function Metrics() {
   if (!data) return <div className="empty"><span className="spin" /> 加载中…</div>
 
   const rows = data.metrics || []
+  const exportQs = new URLSearchParams()
+  if (industry) exportQs.set('framework_key', industry)
+  exportQs.set('token', getToken())
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1rem' }}>
         <div className="sec-title" style={{ margin: 0 }}>指标库 · 数据飞轮</div>
         <div style={{ flex: 1 }} />
-        <a className="btn" href={`/api/metrics/export${industry ? `?framework_key=${industry}` : ''}`} download>
+        <a className="btn" href={`/api/metrics/export?${exportQs.toString()}`} download>
           导出 Excel
         </a>
       </div>

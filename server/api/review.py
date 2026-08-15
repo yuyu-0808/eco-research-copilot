@@ -19,6 +19,7 @@ from src.utils.frameworks import _build_value_spec
 from src.utils.evidence import EvidenceRecord, records_to_text
 from server.workers import queue
 from server.workers.runner import run_research
+from server.response import ok
 
 router = APIRouter(prefix="/api/projects/{project_id}/review", tags=["review"])
 
@@ -74,7 +75,7 @@ def get_review(project_id: str):
         verify = (stages.get("verify") or {}).get("data") or {}
         resp["coverage"] = verify.get("coverage", {})
         resp["conflicts"] = verify.get("conflicts", [])
-    return resp
+    return ok(resp)
 
 
 @router.put("/framework")
@@ -109,7 +110,7 @@ def save_framework(project_id: str, payload: dict = None):
     arch["research_requirements"] = requirements
     state["stages"]["architect"]["data"] = arch
     ck.save(state)
-    return {"project_id": project_id, "saved": len(sections)}
+    return ok({"project_id": project_id, "saved": len(sections)})
 
 
 @router.put("/materials")
@@ -131,7 +132,7 @@ def save_materials(project_id: str, payload: dict = None):
     verify["verified_context"] = records_to_text(kept)
     state["stages"]["verify"]["data"] = verify
     ck.save(state)
-    return {"project_id": project_id, "kept": len(kept)}
+    return ok({"project_id": project_id, "kept": len(kept)})
 
 
 @router.put("/draft")
@@ -143,7 +144,7 @@ def save_draft(project_id: str, payload: dict = None):
     write["markdown_report"] = markdown
     state["stages"]["write"]["data"] = write
     ck.save(state)
-    return {"project_id": project_id, "saved": True}
+    return ok({"project_id": project_id, "saved": True})
 
 
 @router.post("/confirm")
@@ -156,4 +157,4 @@ def confirm(project_id: str):
     ck.clear_review()
     if not queue.submit(project_id, run_research, project_id, topic, True):
         raise HTTPException(409, "该项目已有任务在运行")
-    return {"project_id": project_id, "status": "resumed"}
+    return ok({"project_id": project_id, "status": "resumed"})

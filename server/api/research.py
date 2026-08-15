@@ -12,6 +12,7 @@ from src.ui.helpers import load_checkpoint, load_result, PROJECTS_DIR
 from src.utils.checkpoint import Checkpoint
 from server.workers import queue
 from server.workers.runner import run_research
+from server.response import ok
 
 router = APIRouter(prefix="/api/projects", tags=["research"])
 
@@ -37,7 +38,7 @@ def run(project_id: str, payload: dict = None):
         raise HTTPException(400, "缺少课题 topic")
     if not queue.submit(project_id, run_research, project_id, topic, False):
         raise HTTPException(409, "该项目已有任务在运行")
-    return {"project_id": project_id, "topic": topic, "status": "queued"}
+    return ok({"project_id": project_id, "topic": topic, "status": "queued"})
 
 
 @router.post("/{project_id}/pause")
@@ -45,7 +46,7 @@ def pause(project_id: str):
     """请求暂停：置 pause_requested，orchestrator 在阶段边界优雅停下。"""
     d = _dir(project_id)
     Checkpoint(d).request_pause()
-    return {"project_id": project_id, "status": "pause_requested"}
+    return ok({"project_id": project_id, "status": "pause_requested"})
 
 
 @router.post("/{project_id}/resume")
@@ -57,7 +58,7 @@ def resume(project_id: str):
     ck.clear_pause()
     if not queue.submit(project_id, run_research, project_id, topic, True):
         raise HTTPException(409, "该项目已有任务在运行")
-    return {"project_id": project_id, "status": "resumed"}
+    return ok({"project_id": project_id, "status": "resumed"})
 
 
 @router.post("/{project_id}/reset")
@@ -75,15 +76,15 @@ def reset(project_id: str, payload: dict = None):
         state["status"] = "running"
         state["review_stage"] = ""
         ck.save(state)
-    return {"project_id": project_id, "reset_from": stage or "all"}
+    return ok({"project_id": project_id, "reset_from": stage or "all"})
 
 
 @router.get("/{project_id}/result")
 def result(project_id: str):
     """报告结果（evidence / conflicts / reasons / warnings / trace / docx）。"""
     d = _dir(project_id)
-    return {
+    return ok({
         "project_id": project_id,
         "result": load_result(d),
         "checkpoint": load_checkpoint(d),
-    }
+    })

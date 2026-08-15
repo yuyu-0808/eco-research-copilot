@@ -18,6 +18,7 @@ from src.ui.helpers import (
     PROJECTS_DIR,
 )
 from server.workers import queue
+from server.response import ok
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -31,7 +32,7 @@ def _dir(project_id: str) -> str:
 
 @router.get("")
 def get_projects():
-    return {"projects": list_projects(), "metrics": dashboard_metrics()}
+    return ok({"projects": list_projects(), "metrics": dashboard_metrics()})
 
 
 @router.post("")
@@ -42,18 +43,18 @@ def create_project(payload: dict = None):
         raise HTTPException(400, "topic 不能为空")
     project_id = f"Project_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     os.makedirs(os.path.join(PROJECTS_DIR, project_id), exist_ok=True)
-    return {"project_id": project_id, "topic": topic}
+    return ok({"project_id": project_id, "topic": topic})
 
 
 @router.get("/{project_id}")
 def get_project(project_id: str):
     d = _dir(project_id)
-    return {
+    return ok({
         "project_id": project_id,
         "checkpoint": load_checkpoint(d),
         "result": load_result(d),
         "running": queue.is_running(project_id),
-    }
+    })
 
 
 @router.delete("/{project_id}")
@@ -61,4 +62,4 @@ def delete_project(project_id: str):
     d = _dir(project_id)
     queue.cancel(project_id)  # 若在跑，先从队列移除
     shutil.rmtree(d, ignore_errors=True)
-    return {"deleted": project_id}
+    return ok({"deleted": project_id})

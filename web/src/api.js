@@ -1,21 +1,47 @@
-// API 客户端：请求同源相对路径（开发期由 Vite 代理转发到 FastAPI 后端）。
+// API 客户端：统一 {code,data,message} 解包 + 单 Token 自动携带。
+
+let _token = ''
+let _tokenPromise = null
+
+function ensureToken() {
+  if (_token) return Promise.resolve(_token)
+  if (!_tokenPromise) {
+    _tokenPromise = fetch('/api/auth/bootstrap')
+      .then((r) => r.json())
+      .then((body) => {
+        _token = (body && body.data && body.data.token) || ''
+        return _token
+      })
+      .catch(() => {
+        _token = ''
+        return ''
+      })
+  }
+  return _tokenPromise
+}
+
+// 模块加载即开始拉取令牌，保证后续 WS / 下载等场景可用
+ensureToken()
+
+export function getToken() {
+  return _token
+}
 
 async function request(path, options = {}) {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  })
-  if (!res.ok) {
-    let msg = res.statusText
-    try {
-      const d = await res.json()
-      msg = d.detail || msg
-    } catch {
-      /* ignore */
-    }
-    throw new Error(msg || `请求失败 (${res.status})`)
+  const token = await ensureToken()
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(path, { ...options, headers })
+  let body
+  try {
+    body = await res.json()
+  } catch {
+    body = { code: -1, message: res.statusText || `请求失败 (${res.status})` }
   }
-  return res.json()
+  if (body.code !== 0) {
+    throw new Error(body.message || `请求失败 (${res.status})`)
+  }
+  return body.data
 }
 
 export const apiGet = (p) => request(p)
@@ -25,10 +51,12 @@ export const apiPut = (p, body) =>
   request(p, { method: 'PUT', body: JSON.stringify(body ?? {}) })
 export const apiDelete = (p) => request(p, { method: 'DELETE' })
 
-// WebSocket 进度客户端；返回 ws 实例，由调用方决定何时关闭。
+// WebSocket 进度客户端（token 经查询参数传入，因 WS 握手无法带自定义 header）
 export function connectWS(projectId, onMessage, onClose) {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const ws = new WebSocket(`${proto}://${window.location.host}/ws/projects/${projectId}`)
+  const ws = new WebSocket(
+    `${proto}://${window.location.host}/ws/projects/${projectId}?token=${encodeURIComponent(_token)}`,
+  )
   ws.onmessage = (e) => {
     try {
       onMessage(JSON.parse(e.data))

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse
 
 from src.utils.metrics_store import query_metrics, export_excel, _all_keys
+from server.response import ok
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 
@@ -16,11 +17,11 @@ def list_metrics(
 ):
     """检索指标库（可按行业 / 指标 / 时间过滤）。"""
     rows = query_metrics(framework_key, metric, period)
-    return {
+    return ok({
         "count": len(rows),
         "industries": _all_keys(),
         "metrics": rows,
-    }
+    })
 
 
 @router.get("/export")
