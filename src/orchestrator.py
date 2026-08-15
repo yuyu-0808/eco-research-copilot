@@ -19,7 +19,7 @@ class ResearchOrchestrator:
         # 初始化 5 类专业角色（课题架构师 / 信源研究员 / 事实稽核官 / 内容撰写师 / 交付渲染官）
         self.architect = ArchitectAgent(self.logger)
         self.researcher = ResearcherAgent(self.logger)
-        self.auditor = AuditorAgent(self.logger)
+        self.auditor = AuditorAgent(self.logger, self.ckpt)
         self.writer = WriterAgent(self.logger)
         self.renderer = RendererAgent(self.logger)
 

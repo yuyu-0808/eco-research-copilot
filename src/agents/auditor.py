@@ -9,8 +9,9 @@ from src.utils.source_grade import load_source_skill_doc
 
 
 class AuditorAgent:
-    def __init__(self, logger: AgentLogger):
+    def __init__(self, logger: AgentLogger, ckpt=None):
         self.logger = logger
+        self.ckpt = ckpt  # checkpoint 引用：分批提炼时在批边界响应暂停/终止信号
         self.client = OpenAI(api_key=Config.DEEPSEEK_API_KEY, base_url=Config.BASE_URL)
         self.model = Config.MODEL_NAME
 
@@ -32,8 +33,8 @@ class AuditorAgent:
         requirements = plan_data.get("research_requirements", [])
         topic = plan_data.get("topic", "")
 
-        # 1. LLM 提炼：把原始素材提炼成结构化事实，并归属到必答问题
-        extracted = self._extract_evidence(topic, requirements, raw_context)
+        # 1. LLM 提炼：把原始素材提炼成结构化事实，并归属到必答问题（分批提炼）
+        extracted = self._extract_evidence(topic, requirements, raw_evidence)
 
         # 2. 合并：把信源元数据（tier/publisher）从采集结果回填到提炼证据
         evidence_list = self._merge_meta(extracted, raw_evidence)
@@ -68,16 +69,38 @@ class AuditorAgent:
             "checks": result.get("checks", {}),
         }
 
-    def _extract_evidence(self, topic: str, requirements: list, raw_context: str) -> list:
+    def _extract_evidence(self, topic: str, requirements: list, raw_evidence: list) -> list:
         """让 LLM 把原始素材提炼成结构化事实，并归属到必答问题。
 
-        失败时降级为空列表（由下游 validator 判不达标，触发下一轮检索）。
+        分批提炼：把证据切成小批逐批调用 LLM，降低单次 prompt 的认知复杂度，
+        避免推理模型思维链过长导致输出为空；每批之间响应暂停/终止请求。
+        单批失败不中断整轮，由下游 validator 判不达标后触发下一轮检索。
         """
-        if not raw_context:
+        if not raw_evidence:
             return []
         req_text = json.dumps(requirements, ensure_ascii=False)
         skill_doc = load_source_skill_doc()
-        prompt = f"""
+        batch_size = Config.EVIDENCE_BATCH_SIZE
+
+        def _batch_text(batch) -> str:
+            lines = []
+            for r in batch:
+                title = getattr(r, "source_title", "") or ""
+                url = getattr(r, "source_url", "") or ""
+                excerpt = getattr(r, "excerpt", "") or getattr(r, "claim", "") or ""
+                tier = getattr(r, "source_tier", "") or ""
+                lines.append(f"【信源 · {tier}级】标题: {title}\n链接: {url}\n摘录: {excerpt}")
+            return "\n\n".join(lines)
+
+        all_extracted = []
+        batches = [raw_evidence[i:i + batch_size] for i in range(0, len(raw_evidence), batch_size)]
+        total = len(batches)
+        for idx, batch in enumerate(batches, 1):
+            # 每批之间响应暂停/终止请求（协作式，见 Checkpoint.check_pause）
+            if self.ckpt is not None:
+                self.ckpt.check_pause()
+
+            prompt = f"""
         你是【事实稽核官】的提炼助手。请从下面的原始素材中提炼出高纯度事实，
         并把每条事实归属到对应的必答问题（question_id）。
 
@@ -89,7 +112,7 @@ class AuditorAgent:
         {req_text}
 
         【原始素材（每条含 标题/链接/摘录/信源等级）】：
-        {raw_context}
+        {_batch_text(batch)}
 
         提炼规则：
         1. E 级（低质/营销号）与 F 级（无法判断）素材直接丢弃，不提炼；A/B/C 级优先采信，D 级谨慎；
@@ -102,14 +125,16 @@ class AuditorAgent:
           {{"question_id": "q1", "claim": "事实主张", "value": "数值", "unit": "单位", "period": "时间", "source_title": "信源标题", "source_url": "链接"}}
         ]
         """
-        try:
-            parsed = call_llm(self.client, self.model, self.logger, "事实稽核官", prompt, need_json=True)
-            if isinstance(parsed, dict):
-                parsed = parsed.get("evidence") or parsed.get("facts") or []
-            return parsed if isinstance(parsed, list) else []
-        except Exception as e:
-            self.logger.log_event("事实稽核官", "WARNING", f"证据提炼失败，按无有效证据处理: {e}")
-            return []
+            try:
+                parsed = call_llm(self.client, self.model, self.logger, "事实稽核官", prompt, need_json=True)
+                if isinstance(parsed, dict):
+                    parsed = parsed.get("evidence") or parsed.get("facts") or []
+                if isinstance(parsed, list):
+                    all_extracted.extend(parsed)
+                self.logger.log_event("事实稽核官", "INFO", f"第 {idx}/{total} 批提炼完成，累计 {len(all_extracted)} 条")
+            except Exception as e:
+                self.logger.log_event("事实稽核官", "WARNING", f"第 {idx}/{total} 批提炼失败: {e}")
+        return all_extracted
 
     def _merge_meta(self, extracted: list, raw_evidence: list) -> list:
         """把采集阶段的信源元数据（source_tier/publisher）回填到 LLM 提炼结果。

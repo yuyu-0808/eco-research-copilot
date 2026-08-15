@@ -20,6 +20,7 @@ class Config:
     # 业务边界控制
     MAX_COLLECT_ROUNDS = int(os.getenv("MAX_COLLECT_ROUNDS", "3"))  # 信源检索→事实稽核 最大循环次数
     WRITE_AUDIT_ROUNDS = int(os.getenv("WRITE_AUDIT_ROUNDS", "2"))  # 内容撰写→逻辑稽核 交叉校验最大轮数
+    EVIDENCE_BATCH_SIZE = int(os.getenv("EVIDENCE_BATCH_SIZE", "5"))  # 事实稽核官分批提炼：每批证据条数（防长 prompt 触发思维链爆 token）
     REQUIRE_STRICT_EVIDENCE = os.getenv("REQUIRE_STRICT_EVIDENCE", "True").lower() in ("true", "1")  # 是否开启质量门禁
 
     # 新增：API 速率限制配置（防止频繁调用触发限流）
