@@ -8,6 +8,38 @@ from src.utils.chart_rules import apply_chart_rules
 from src.tools.docx_writer import DocxWriter
 
 
+# ----------------------------------------------------------------------
+# 渲染器插件注册表：新增交付格式 = register_renderer(name, func)
+# func 签名：(project_name, ai_data) -> 输出路径
+# ----------------------------------------------------------------------
+_RENDERERS = {}
+
+
+def register_renderer(name: str, func) -> None:
+    """注册一个渲染器插件。"""
+    _RENDERERS[name] = func
+
+
+def _render_docx(project_name: str, ai_data: dict) -> str:
+    writer = DocxWriter(project_name=project_name)
+    return writer.generate_report(ai_data)
+
+
+def _render_markdown(project_name: str, ai_data: dict) -> str:
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    project_dir = os.path.join(root, "projects", project_name)
+    os.makedirs(project_dir, exist_ok=True)
+    md_path = os.path.join(project_dir, "05_final_report.md")
+    title = ai_data.get("report_title", "调研报告")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(f"# {title}\n\n{ai_data.get('markdown_report', '')}")
+    return md_path
+
+
+register_renderer("docx", _render_docx)
+register_renderer("markdown", _render_markdown)
+
+
 def _load_chart_skill_doc() -> str:
     """加载行研图表规范 skill 文档（skills/chart_spec/SKILL.md），供 prompt 注入。"""
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -107,36 +139,24 @@ class RendererAgent:
         return polished
 
     def format_delivery(self, project_name: str, ai_data: dict) -> str:
-        """文字润色 + 排版，输出最终 Word 文档；排版失败时降级输出 Markdown 并标记风险。"""
+        """文字润色 + 排版（经渲染器注册表分发），排版失败时降级输出 Markdown。"""
         self.logger.log_event("交付渲染官", "START", "开始内容渲染与多格式排版...")
+        fmt = getattr(Config, "REPORT_FORMAT", "docx")
+        renderer = _RENDERERS.get(fmt) or _RENDERERS.get("docx")
 
         try:
             # 1. 文字润色
             ai_data["markdown_report"] = self._polish(ai_data.get("markdown_report", ""))
             self.logger.log_event("交付渲染官", "SUCCESS", "文字润色完成")
 
-            # 2. 排版
-            writer = DocxWriter(project_name=project_name)
-            docx_path = writer.generate_report(ai_data)
-
-            self.logger.log_event("交付渲染官", "SUCCESS", f"研报生成完毕！文件保存在: {docx_path}")
-            return docx_path
+            # 2. 排版（渲染器插件分发）
+            path = renderer(project_name, ai_data)
+            self.logger.log_event("交付渲染官", "SUCCESS", f"研报生成完毕！文件保存在: {path}")
+            return path
 
         except Exception as e:
-            # 排版降级：Word 生成失败时，退回输出 Markdown 文件，不阻断流水线
-            self.logger.log_event("交付渲染官", "WARNING", f"Word 排版失败，降级输出 Markdown: {e}")
-            md_path = self._save_markdown(project_name, ai_data)
+            # 排版降级：指定格式生成失败时，退回输出 Markdown 文件，不阻断流水线
+            self.logger.log_event("交付渲染官", "WARNING", f"{fmt} 排版失败，降级输出 Markdown: {e}")
+            md_path = _render_markdown(project_name, ai_data)
             self.logger.log_event("交付渲染官", "WARNING", f"已降级输出 Markdown（风险标记）: {md_path}")
             return md_path
-
-    def _save_markdown(self, project_name: str, ai_data: dict) -> str:
-        """排版降级兜底：把 Markdown 正文直接落盘为 .md 文件。"""
-        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        project_dir = os.path.join(root, "projects", project_name)
-        os.makedirs(project_dir, exist_ok=True)
-        md_path = os.path.join(project_dir, "05_final_report.md")
-        title = ai_data.get("report_title", "调研报告")
-        content = ai_data.get("markdown_report", "")
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(f"# {title}\n\n{content}")
-        return md_path

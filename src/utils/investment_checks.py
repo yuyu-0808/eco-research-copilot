@@ -329,22 +329,42 @@ def check_multi_source_deviation(evidence: list, threshold: float = DEFAULT_DEVI
 
 
 # ----------------------------------------------------------------------
-# 汇总入口
+# 规则注册表：新增校验规则只需 register_rule，无需改核心编排
 # ----------------------------------------------------------------------
+_RULES = []
+
+
+def register_rule(name: str, func) -> None:
+    """注册一条校验规则。func 签名：(evidence, framework_key) -> list[issue]。"""
+    _RULES.append((name, func))
+
+
+def rule(name: str):
+    """装饰器形式注册规则。"""
+    def deco(func):
+        register_rule(name, func)
+        return func
+    return deco
+
+
+# 内置四条规则注册（签名统一为 (evidence, framework_key)）
+register_rule("financial_reconciliation", lambda e, fw: check_financial_reconciliation(e))
+register_rule("industry_range", check_industry_range)
+register_rule("time_series", lambda e, fw: check_time_series(e))
+register_rule("multi_source_deviation", lambda e, fw: check_multi_source_deviation(e))
+
 
 def run_investment_checks(evidence: list, framework_key: str = "") -> dict:
-    """运行全部投研专属校验，返回分规则结果 + 扁平化的 warnings 列表。"""
+    """运行全部已注册的投研校验规则，返回分规则结果 + 扁平化的 warnings 列表。"""
     evidence = [e for e in (evidence or []) if getattr(e, "claim", "") and getattr(e, "value", "")]
-    financial = check_financial_reconciliation(evidence)
-    industry = check_industry_range(evidence, framework_key)
-    timeseries = check_time_series(evidence)
-    multisource = check_multi_source_deviation(evidence)
-
-    warnings = financial + industry + timeseries + multisource
-    return {
-        "financial_reconciliation": financial,
-        "industry_range": industry,
-        "time_series": timeseries,
-        "multi_source_deviation": multisource,
-        "warnings": warnings,
-    }
+    result = {}
+    warnings = []
+    for name, func in _RULES:
+        try:
+            issues = func(evidence, framework_key) or []
+        except Exception:
+            issues = []  # 单条规则异常不阻断其他规则（全局异常处理之外的第二道防线）
+        result[name] = issues
+        warnings.extend(issues)
+    result["warnings"] = warnings
+    return result

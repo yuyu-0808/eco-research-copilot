@@ -25,15 +25,34 @@ class WebSearcher:
         else:
             self.tavily_client = None
 
+        # 搜索源插件注册表：新增搜索源 = register_provider(name, func)
+        self._providers = {
+            "tavily": self._tavily_search,
+            "ddg": self._ddg_search,
+        }
+
+    def register_provider(self, name: str, func) -> None:
+        """注册一个搜索源插件。func 签名：(query, max_results) -> list[{title,url,snippet}]。"""
+        self._providers[name] = func
+
     def search(self, query: str, max_results: int = 3) -> list:
-        """返回结构化信源列表 [{"title","url","snippet"}]；搜索失败返回兜底框架。"""
-        try:
-            if self.provider == "tavily" and self.tavily_client:
-                results = self._tavily_search(query, max_results)
-            else:
-                results = self._ddg_search(query, max_results)
-        except Exception:
-            results = []
+        """返回结构化信源列表 [{"title","url","snippet"}]；搜索失败返回兜底框架。
+
+        分发顺序：配置的搜索源 → 该源无结果时回落 ddg → 仍无结果返回兜底框架。
+        """
+        results = []
+        func = self._providers.get(self.provider)
+        if func:
+            try:
+                results = func(query, max_results) or []
+            except Exception:
+                results = []
+        # 配置源无结果时回落到 ddg（若配置源本身不是 ddg）
+        if not results and self.provider != "ddg" and "ddg" in self._providers:
+            try:
+                results = self._providers["ddg"](query, max_results) or []
+            except Exception:
+                results = []
         if not results:
             return self._fallback_framework(query)
         return results
