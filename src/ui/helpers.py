@@ -199,18 +199,36 @@ def list_projects():
             ):
                 resumable = True
 
+        # 状态精确化：completed > checkpoint 运行态（running/paused/failed/stopped）> partial
+        if completed:
+            status = "completed"
+        elif ck_status:
+            status = ck_status
+        else:
+            status = "partial"
+        # 完成时间：优先 result.json 的 created_at，兜底 docx 文件修改时间
+        completed_at = ""
+        if result:
+            completed_at = (result or {}).get("created_at", "")
+        if not completed_at and os.path.exists(docx):
+            try:
+                completed_at = datetime.fromtimestamp(os.path.getmtime(docx)).isoformat()
+            except OSError:
+                pass
+
         projects.append({
             "id": name,
             "topic": topic,
             "created_at": name[len("Project_"):] if name.startswith("Project_") else name,
             "has_docx": os.path.exists(docx),
             "has_result": result is not None,
-            "status": "completed" if completed else "partial",
+            "status": status,
             "duration": duration,
             "n_charts": n_charts,
             "n_tables": n_tables,
             "n_events": len(entries),
             "relative_time": _relative_time(name[len("Project_"):] if name.startswith("Project_") else ""),
+            "completed_at": completed_at,
             "passed_qa": passed_qa,
             "dir": d,
             "resumable": resumable,
