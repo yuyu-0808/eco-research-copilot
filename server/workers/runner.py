@@ -10,6 +10,7 @@ from src.orchestrator import ResearchOrchestrator
 from src.utils.checkpoint import Checkpoint, PauseRequested
 from src.ui.helpers import save_result
 from src.utils.metrics_store import extract_metrics, save_metrics
+from src.utils import db
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PROJECTS_DIR = os.path.join(ROOT_DIR, "projects")
@@ -70,6 +71,17 @@ def _persist_result(project_dir: str, project_id: str, topic: str, orchestrator)
         "trace": state.get("trace", {}),
     }
     save_result(project_dir, project_id, topic, final_result)
+
+    # 项目元信息入 SQLite（状态 completed + 图表数等）
+    try:
+        db.project_upsert(
+            project_id, topic=topic, status="completed",
+            has_result=True, has_docx=bool(docx_path),
+            n_charts=len(structure.get("charts", [])),
+            n_tables=len(structure.get("tables", [])),
+        )
+    except Exception:
+        pass
 
     # 数据飞轮：把通过校验的核心指标沉淀到行业指标库（失败不阻断）
     try:

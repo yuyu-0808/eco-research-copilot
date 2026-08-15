@@ -1,27 +1,23 @@
-"""行业指标知识库：数据飞轮。
+"""行业指标知识库：数据飞轮（存储后端为 SQLite）。
 
-每次报告生成后，把通过校验的核心指标沉淀到对应行业的指标库（JSON 文件），
-新建同行业报告时用历史指标交叉验证，冲突优先提示历史高等级信源数值。
-指标库支持按行业 / 指标 / 时间检索，并可导出 Excel。
+每次报告生成后，把通过校验的核心指标沉淀到 SQLite 指标库，新建同行业报告时
+用历史指标交叉验证，冲突优先提示历史高等级信源数值。支持按行业 / 指标 / 时间
+检索，并可导出 Excel。
 
-存储：data/metrics_library/{framework_key}.json（每行业一个文件，透明可检视）。
+存储：SQLite 表 metrics（见 src/utils/db.py），旧 JSON 数据自动迁移。
 """
 
-import json
 import os
 from datetime import datetime
 
 from .normalizer import normalize_value, normalize_period
 from .investment_checks import classify_metric, metric_label
+from . import db
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-METRICS_DIR = os.path.join(_ROOT, "data", "metrics_library")
+_DATA_DIR = os.path.join(_ROOT, "data")
 
 _TIER_RANK = {"A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "F": 1, "": 0}
-
-
-def _path(framework_key: str) -> str:
-    return os.path.join(METRICS_DIR, f"{framework_key}.json")
 
 
 def _field(e, name, default=""):
@@ -32,10 +28,7 @@ def _field(e, name, default=""):
 
 
 def extract_metrics(evidence, framework_key: str = "") -> list:
-    """从证据列表提取核心指标条目（指标名 + 归一化数值 + 时间 + 来源 + 等级）。
-
-    只提取「有指标归类 + 可归一化数值」的证据；比例型与非比例型均记录。
-    """
+    """从证据列表提取核心指标条目（指标名 + 归一化数值 + 时间 + 来源 + 等级）。"""
     entries = []
     for e in evidence or []:
         claim = _field(e, "claim", "")
@@ -66,74 +59,28 @@ def extract_metrics(evidence, framework_key: str = "") -> list:
 
 def load_metrics(framework_key: str) -> list:
     """读取某行业的全部历史指标。"""
-    path = _path(framework_key)
-    if not os.path.exists(path):
-        return []
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, OSError):
-        return []
+    return db.metrics_list(framework_key)
 
 
 def save_metrics(framework_key: str, entries: list, report_id: str = "") -> int:
-    """把指标条目追加到行业指标库（按 指标+年份+归一化值 去重）。
-
-    通用框架（generic）不沉淀（无行业口径）。返回新增条数。
-    """
-    if not framework_key or framework_key == "generic" or not entries:
-        return 0
-    existing = load_metrics(framework_key)
-    seen = {
-        (m.get("metric"), m.get("year"), round(m.get("value_norm", 0) or 0, 4))
-        for m in existing
-    }
-    added = 0
-    for en in entries:
-        key = (en.get("metric"), en.get("year"), round(en.get("value_norm", 0) or 0, 4))
-        if key in seen:
-            continue
-        seen.add(key)
-        en["report_id"] = report_id
-        en["saved_at"] = datetime.now().isoformat(timespec="seconds")
-        existing.append(en)
-        added += 1
-    if added:
-        os.makedirs(METRICS_DIR, exist_ok=True)
-        with open(_path(framework_key), "w", encoding="utf-8") as f:
-            json.dump(existing, f, ensure_ascii=False, indent=2)
-    return added
+    """把指标条目追加到行业指标库（SQLite，去重）。返回新增条数。"""
+    return db.metrics_insert(framework_key, entries, report_id)
 
 
 def _all_keys() -> list:
-    if not os.path.isdir(METRICS_DIR):
-        return []
-    return sorted(f[:-5] for f in os.listdir(METRICS_DIR) if f.endswith(".json"))
+    return db.metrics_framework_keys()
 
 
 def query_metrics(framework_key: str = None, metric: str = None, period: str = None) -> list:
     """检索指标库（可按行业 / 指标 / 时间过滤）。"""
-    keys = [framework_key] if framework_key else _all_keys()
-    result = []
-    for k in keys:
-        for m in load_metrics(k):
-            if metric and m.get("metric") != metric:
-                continue
-            if period and period not in (m.get("period") or ""):
-                continue
-            row = dict(m)
-            row["framework_key"] = k
-            result.append(row)
-    return result
+    rows = db.metrics_list(framework_key, metric, period)
+    for r in rows:
+        r.setdefault("framework_key", framework_key or "")
+    return rows
 
 
 def cross_validate(framework_key: str, evidence: list, threshold: float = 0.2) -> list:
-    """用历史指标库交叉验证当前证据，返回冲突提示列表。
-
-    同指标同年份：历史最高等级信源值 vs 当前值，相对偏差超阈值 → 冲突，
-    优先提示历史高等级信源数值。
-    """
+    """用历史指标库交叉验证当前证据，返回冲突提示列表。"""
     historical = load_metrics(framework_key)
     if not historical:
         return []
@@ -194,7 +141,7 @@ def export_excel(framework_key: str = None, out_path: str = None) -> str:
             r.get("saved_at", ""),
         ])
 
-    out_path = out_path or os.path.join(METRICS_DIR, "metrics_export.xlsx")
+    out_path = out_path or os.path.join(_DATA_DIR, "metrics_export.xlsx")
     dirname = os.path.dirname(out_path)
     if dirname:
         os.makedirs(dirname, exist_ok=True)

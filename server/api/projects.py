@@ -17,6 +17,7 @@ from src.ui.helpers import (
     dashboard_metrics,
     PROJECTS_DIR,
 )
+from src.utils import db
 from server.workers import queue
 from server.response import ok
 
@@ -43,6 +44,9 @@ def create_project(payload: dict = None):
         raise HTTPException(400, "topic 不能为空")
     project_id = f"Project_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     os.makedirs(os.path.join(PROJECTS_DIR, project_id), exist_ok=True)
+    # 项目元信息入 SQLite（checkpoint 中间状态仍走磁盘 JSON）
+    db.project_upsert(project_id, topic=topic, status="running",
+                      checkpoint_path=os.path.join(PROJECTS_DIR, project_id, "checkpoint.json"))
     return ok({"project_id": project_id, "topic": topic})
 
 
