@@ -1,6 +1,5 @@
 import json
 import os
-import streamlit as st
 from datetime import datetime
 
 class AgentLogger:
@@ -26,18 +25,3 @@ class AgentLogger:
         status_icon = "✅" if status == "SUCCESS" else "❌" if status == "FAILED" else "⏳"
         log_str = f"[{status_icon} {agent_name}] {action}"
         print(log_str)
-        
-        # 🔥 神奇的 UI 联动：把后端日志强行推给前端网页的 Status 框！
-        # 统一用 st.write 而非 st.success/st.error，保证在 st.status 块内能实时流式渲染
-        try:
-            # 去除长文本换行，让网页显示更清爽
-            safe_details = details.replace("\n", " ")[:80] + "..." if len(details) > 80 else details
-            if status == "SUCCESS":
-                st.write(f"✅ **{agent_name}** · {safe_details}")
-            elif status == "FAILED":
-                st.write(f"❌ **{agent_name}** · {safe_details}")
-            else:
-                st.write(f"⏳ **{agent_name}** · {safe_details}")
-        except:
-            # 兼容非 Streamlit 环境
-            pass

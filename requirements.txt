@@ -1,9 +1,6 @@
 # Eco-Research Copilot 依赖清单
 # 安装方式：pip install -r requirements.txt
 
-# Web 应用框架
-streamlit
-
 # 环境变量加载
 python-dotenv
 

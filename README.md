@@ -20,7 +20,7 @@
 
 | 决策 | 选择 | 理由 |
 |------|------|------|
-| **交互形态** | Streamlit **Web 工作台** | 面向投研 / 咨询 / 战略等非技术用户，核心体验是「输入课题 → 拿到可溯源报告」 |
+| **交互形态** | React + FastAPI **Web 工作台** | 前端 React + Vite，后端 FastAPI + WebSocket 实时推送；面向投研 / 咨询 / 战略等非技术用户，核心体验是「输入课题 → 拿到可溯源报告」 |
 | **编排模式** | 闭环迭代 + **人机协同** | 任务状态与中间产物全量持久化，支持**运行中暂停 → 查看 / 编辑中间产物 → 从下游继续** |
 | **防幻觉** | **代码级证据校验** | 证据落成强类型契约，代码查「每章证据数 + 信源等级 + 数值矛盾」，编造数据在数据结构层就会被拒 |
 | **容错** | 分级降级（备用模型 / 搜索兜底 / 渲染降级） | 单点失败不中断全链路：主模型挂了切备用，搜索挂了用内置框架兜底，渲染挂了降级输出 Markdown |
@@ -89,6 +89,7 @@ flowchart LR
 
 ### 环境要求
 - Python 3.10+
+- Node.js 18+（前端构建）
 - 一个兼容 OpenAI 协议的 LLM 网关（默认使用 DeepSeek）
 
 ### 安装
@@ -119,17 +120,31 @@ cp .env.example .env
 | `REVIEW_MODE` | — | `auto`（全自动）/ `manual`（三阶段人机确认：框架→素材→终稿） |
 
 ### 运行
+
+先启动后端 API（FastAPI）：
 ```bash
-streamlit run main.py
+uvicorn server.main:app --reload
 ```
-浏览器打开 `http://localhost:8501`，输入课题即可开始。
+再启动前端（React + Vite）：
+```bash
+cd web
+npm install
+npm run dev
+```
+浏览器打开 Vite 输出的地址（默认 `http://localhost:5173`），输入课题即可开始；后端 API 文档见 `http://localhost:8000/docs`。
 
 ## 项目结构
 
 ```
 eco-research-copilot/
-├── main.py                  # Streamlit 前端（SaaS 风格界面 + 实时流水线可视化）
-├── src/
+├── web/                     # 前端（React + Vite + ECharts）
+│   └── src/
+│       ├── pages/           # 工作台 / 新建调研 / 报告预览 / 指标库 / 设置
+│       └── ...              # 组件、图表、Markdown 渲染、API 封装
+├── server/                  # 后端 API（FastAPI + WebSocket）
+│   ├── main.py              # 应用入口（路由挂载 / CORS / 鉴权 / 异常处理）
+│   └── api/                 # projects / research / metrics / settings / export / frameworks / ...
+├── src/                     # 核心业务逻辑（前后端共用）
 │   ├── orchestrator.py      # 多智能体编排器（含检索-稽核内循环）
 │   ├── agents/              # 五类专业行研角色
 │   │   ├── architect.py      # 课题架构师（匹配行研框架）
@@ -137,9 +152,10 @@ eco-research-copilot/
 │   │   ├── auditor.py        # 事实稽核官（代码校验 + 逻辑稽核）
 │   │   ├── writer.py         # 内容撰写师
 │   │   └── renderer.py       # 交付渲染官（结构化提炼 + 排版）
-│   ├── tools/               # 工具层（web_search / docx_writer）
+│   ├── tools/               # 工具层（web_search / docx_writer / pdf_writer）
 │   ├── ui/                  # 前端辅助（项目扫描 / 指标计算 / 图表渲染）
-│   └── utils/               # 配置 / 日志 / LLM 调用工具
+│   └── utils/               # 配置 / 日志 / 数据库 / 校验 / LLM 调用工具
+├── frameworks/              # 行研框架插件（YAML 配置）
 ├── projects/                # 运行时产物（每次调研的日志 + Word 报告，已 gitignore）
 ├── .env.example             # 环境变量模板
 └── requirements.txt
