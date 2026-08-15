@@ -39,6 +39,7 @@ class Checkpoint:
             "framework_key": "",   # 用户选择的行业框架 key；空 = 自动匹配
             "error": "",           # 失败原因（status=failed 时记录）
             "archived": False,     # 是否已归档
+            "draft_feedback": "",  # 终稿打回重写的修改意见（撰写阶段消费后清空）
             "stages": {s: {"status": "pending", "data": None} for s in self.STAGES},
         }
 
@@ -61,6 +62,7 @@ class Checkpoint:
         state.setdefault("framework_key", "")
         state.setdefault("error", "")
         state.setdefault("archived", False)
+        state.setdefault("draft_feedback", "")
         stages = state.setdefault("stages", {})
         for s in self.STAGES:
             stages.setdefault(s, {"status": "pending", "data": None})

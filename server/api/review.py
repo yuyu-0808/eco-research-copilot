@@ -75,6 +75,35 @@ def get_review(project_id: str):
         verify = (stages.get("verify") or {}).get("data") or {}
         resp["coverage"] = verify.get("coverage", {})
         resp["conflicts"] = verify.get("conflicts", [])
+        resp["warnings"] = verify.get("warnings", [])
+        resp["reasons"] = verify.get("reasons", [])
+        resp["draft_feedback"] = state.get("draft_feedback", "")
+        # 覆盖率报告：join research_requirements（章节/门槛） + coverage（实际证据数）
+        plan = (stages.get("architect") or {}).get("data") or {}
+        reqs = plan.get("research_requirements", []) or []
+        coverage = verify.get("coverage", {}) or {}
+        report = []
+        for r in reqs:
+            qid = r.get("question_id", "")
+            covered = coverage.get(qid, 0)
+            min_ev = r.get("min_evidence", 1)
+            report.append({
+                "question_id": qid,
+                "section": r.get("section", ""),
+                "question": r.get("text", ""),
+                "min_evidence": min_ev,
+                "min_tier": r.get("min_tier", ""),
+                "covered": covered,
+                "status": "pass" if covered >= min_ev else "fail",
+            })
+        total = len(report)
+        passed = sum(1 for x in report if x["status"] == "pass")
+        resp["coverage_report"] = report
+        resp["coverage_summary"] = {
+            "total": total,
+            "passed": passed,
+            "rate": round(passed / total * 100) if total else 0,
+        }
     return ok(resp)
 
 
@@ -137,24 +166,34 @@ def save_materials(project_id: str, payload: dict = None):
 
 @router.put("/draft")
 def save_draft(project_id: str, payload: dict = None):
-    """保存终稿编辑：正文 markdown。"""
+    """保存终稿编辑：正文 markdown + 可选打回修改意见。"""
     d, ck, state = _state(project_id)
     markdown = (payload or {}).get("markdown", "")
+    feedback = ((payload or {}).get("feedback") or "").strip()
     write = (state["stages"].get("write") or {}).get("data") or {}
     write["markdown_report"] = markdown
     state["stages"]["write"]["data"] = write
+    if feedback:
+        state["draft_feedback"] = feedback
     ck.save(state)
-    return ok({"project_id": project_id, "saved": True})
+    return ok({"project_id": project_id, "saved": True, "feedback": bool(feedback)})
 
 
 @router.post("/confirm")
-def confirm(project_id: str):
-    """确认通过：清除确认点，从断点续跑。"""
+def confirm(project_id: str, payload: dict = None):
+    """确认通过（或打回重写）并续跑。
+
+    - rewrite=False：确认通过，继续渲染排版；
+    - rewrite=True：打回重写，复位撰写阶段，携带 draft_feedback 重新撰写。
+    """
     d, ck, state = _state(project_id)
     topic = state.get("topic", "")
     if not topic:
         raise HTTPException(400, "项目缺少课题，无法续跑")
+    rewrite = bool((payload or {}).get("rewrite", False))
+    if rewrite:
+        ck.reset_from("write")  # 复位撰写+渲染，让 draft_feedback 生效
     ck.clear_review()
     if not queue.submit(project_id, run_research, project_id, topic, True):
         raise HTTPException(409, "该项目已有任务在运行")
-    return ok({"project_id": project_id, "status": "resumed"})
+    return ok({"project_id": project_id, "status": "resumed", "rewrite": rewrite})

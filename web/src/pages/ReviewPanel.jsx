@@ -28,10 +28,10 @@ export default function ReviewPanel({ projectId, reviewStage, onDone }) {
   }
   useEffect(() => { load() }, [projectId])
 
-  async function confirm() {
+  async function confirm(rewrite = false) {
     setSaving(true)
     try {
-      await apiPost(`/api/projects/${projectId}/review/confirm`)
+      await apiPost(`/api/projects/${projectId}/review/confirm`, { rewrite })
       onDone()
     } catch (e) {
       setErr(e.message)
@@ -49,9 +49,9 @@ export default function ReviewPanel({ projectId, reviewStage, onDone }) {
       </div>
       {reviewStage === 'framework' && <FrameworkEdit data={data} onSaved={load} />}
       {reviewStage === 'materials' && <MaterialsEdit data={data} onSaved={load} />}
-      {reviewStage === 'draft' && <DraftEdit data={data} onSaved={load} />}
+      {reviewStage === 'draft' && <DraftEdit data={data} onSaved={load} onRewrite={() => confirm(true)} />}
       <div style={{ marginTop: '1.1rem', display: 'flex', gap: '0.6rem' }}>
-        <button className="btn primary" onClick={confirm} disabled={saving}>
+        <button className="btn primary" onClick={() => confirm(false)} disabled={saving}>
           {saving ? (<><span className="spin" /> 确认中…</>) : '确认通过，继续执行'}
         </button>
       </div>
@@ -258,30 +258,96 @@ function MaterialsEdit({ data, onSaved }) {
 
 const TIER_LABEL = { A: '一手官方', B: '权威媒体', C: '行业专业', D: '一般来源', E: '低质来源', F: '无法判断' }
 
-/* ---------------- 终稿确认：正文编辑 ---------------- */
+/* ---------------- 终稿确认：覆盖率仪表盘 + 正文编辑 + 打回重写 ---------------- */
 
-function DraftEdit({ data, onSaved }) {
+function DraftEdit({ data, onSaved, onRewrite }) {
   const [markdown, setMarkdown] = useState(data.markdown || '')
+  const [feedback, setFeedback] = useState(data.draft_feedback || '')
   const [saved, setSaved] = useState(false)
 
   async function save() {
-    await apiPut(`/api/projects/${data.project_id}/review/draft`, { markdown })
+    await apiPut(`/api/projects/${data.project_id}/review/draft`, { markdown, feedback })
     setSaved(true)
     onSaved && onSaved()
   }
 
-  const cov = data.coverage || {}
+  async function rewrite() {
+    await apiPut(`/api/projects/${data.project_id}/review/draft`, { markdown, feedback })
+    onRewrite && onRewrite()
+  }
+
+  const report = data.coverage_report || []
+  const summary = data.coverage_summary || {}
+  const conflicts = data.conflicts || []
+  const fails = report.filter((r) => r.status === 'fail')
+  const rate = summary.rate ?? 0
+
   return (
     <div>
-      {Object.keys(cov).length > 0 && (
-        <div className="muted" style={{ fontSize: 13, marginBottom: '0.6rem' }}>
-          证据覆盖（question_id=条数）：{Object.entries(cov).map(([k, v]) => `${k}=${v}`).join(' · ')}
+      {/* 覆盖率仪表盘 */}
+      {report.length > 0 && (
+        <div className="card" style={{ background: 'var(--surface-2)', marginBottom: '0.8rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.5rem' }}>
+            <b>证据覆盖率</b>
+            <span style={{ fontWeight: 800, fontSize: 20, color: rate >= 100 ? 'var(--success)' : 'var(--danger)' }}>{rate}%</span>
+            <span className="muted" style={{ fontSize: 12 }}>（{summary.passed}/{summary.total} 章达标）</span>
+          </div>
+          <div style={{ height: 10, background: 'var(--border)', borderRadius: 999, overflow: 'hidden' }}>
+            <div style={{ width: `${rate}%`, height: '100%', background: rate >= 100 ? 'var(--success)' : 'var(--brand)', transition: 'width .3s' }} />
+          </div>
+
+          {/* 未达标章节 */}
+          {fails.length > 0 && (
+            <div style={{ marginTop: '0.7rem' }}>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginBottom: '0.3rem' }}>
+                未达标章节（证据不足）：
+              </div>
+              {fails.map((r) => (
+                <div key={r.question_id} style={{ fontSize: 13, padding: '0.2rem 0', color: 'var(--danger)' }}>
+                  ✗ {r.section || r.question_id}：需 ≥{r.min_evidence} 条证据，当前 {r.covered} 条
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 章节明细 */}
+          <div style={{ marginTop: '0.6rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+            {report.map((r) => (
+              <span key={r.question_id} className={`badge ${r.status === 'pass' ? 'ok' : 'danger'}`}>
+                {r.section || r.question_id} · {r.covered}/{r.min_evidence}
+              </span>
+            ))}
+          </div>
         </div>
       )}
-      <textarea rows={18} value={markdown} onChange={(e) => setMarkdown(e.target.value)} style={{ width: '100%', fontFamily: 'monospace', fontSize: 13 }} />
-      <div style={{ marginTop: '0.8rem' }}>
+
+      {/* 矛盾数据 */}
+      {conflicts.length > 0 && (
+        <div className="card" style={{ background: 'var(--danger-soft)', marginBottom: '0.8rem' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)', marginBottom: '0.3rem' }}>
+            ⚠ 矛盾数据（{conflicts.length} 处，请核实）
+          </div>
+          {conflicts.map((c, i) => (
+            <div key={i} style={{ fontSize: 13, padding: '0.15rem 0' }}>
+              · {c.claim || c.message || '—'}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <textarea rows={16} value={markdown} onChange={(e) => setMarkdown(e.target.value)} style={{ width: '100%', fontFamily: 'monospace', fontSize: 13 }} />
+
+      <div className="field" style={{ marginTop: '0.6rem' }}>
+        <label>修改意见（打回重写时附带）</label>
+        <textarea rows={3} placeholder="例如：第二章竞争格局数据偏旧，请补充 2024 年最新份额数据…" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
+      </div>
+
+      <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.6rem' }}>
         <button className="btn" onClick={save}>保存终稿</button>
-        {saved && <span className="badge ok" style={{ marginLeft: '0.6rem' }}>已保存</span>}
+        <button className="btn" onClick={rewrite} style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+          打回重写（带修改意见）
+        </button>
+        {saved && <span className="badge ok">已保存</span>}
       </div>
     </div>
   )

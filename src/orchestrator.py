@@ -271,7 +271,8 @@ class ResearchOrchestrator:
         max_rounds = Config.WRITE_AUDIT_ROUNDS
         current_round = 1
         markdown_report = ""
-        feedback = None
+        # 用户打回意见作为初始 feedback（终稿确认点打回重写）
+        feedback = state.get("draft_feedback", "") or None
         is_pass = False
 
         while current_round <= max_rounds:
@@ -293,6 +294,10 @@ class ResearchOrchestrator:
             self.logger.log_event("Orchestrator", "WARNING", "⚠️ 交叉校验轮次耗尽，采用当前版本正文（逻辑校验为软门禁）。")
 
         self.ckpt.mark_done("write", {"markdown_report": markdown_report, "is_pass": is_pass, "round": current_round})
+        # 消费过的打回意见清空，避免下次续跑重复消费
+        if state.get("draft_feedback"):
+            state["draft_feedback"] = ""
+            self.ckpt.save(state)
         self._maybe_review("draft")
         return markdown_report
 
