@@ -254,7 +254,7 @@ class ResearchOrchestrator:
             return data
         self.ckpt.check_pause()
         topic = plan_data.get("topic")
-        safe_context = verified_context[:5000] if verified_context else "（无可用底层数据）"
+        safe_context = verified_context if verified_context else "（无可用底层数据）"
         structure = self.renderer.generate_structure(topic, safe_context)
         self.ckpt.mark_done("structure", structure)
         return structure
@@ -270,7 +270,7 @@ class ResearchOrchestrator:
             return data.get("markdown_report", "")
 
         topic = plan_data.get("topic")
-        safe_context = verified_context[:5000] if verified_context else "（无可用底层数据）"
+        safe_context = verified_context if verified_context else "（无可用底层数据）"
         references = structure.get("references", [])
         max_rounds = Config.WRITE_AUDIT_ROUNDS
         current_round = 1

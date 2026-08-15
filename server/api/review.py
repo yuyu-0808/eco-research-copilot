@@ -192,7 +192,10 @@ def confirm(project_id: str, payload: dict = None):
         raise HTTPException(400, "项目缺少课题，无法续跑")
     rewrite = bool((payload or {}).get("rewrite", False))
     if rewrite:
-        ck.reset_from("write")  # 复位撰写+渲染，让 draft_feedback 生效
+        # 按确认点决定打回深度：框架打回从架构重跑，素材打回从校验重跑，终稿打回从撰写重跑
+        stage = state.get("review_stage", "")
+        reset_map = {"framework": "architect", "materials": "verify", "draft": "write"}
+        ck.reset_from(reset_map.get(stage, "write"))
     ck.clear_review()
     if not queue.submit(project_id, run_research, project_id, topic, True):
         raise HTTPException(409, "该项目已有任务在运行")

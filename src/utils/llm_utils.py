@@ -82,8 +82,8 @@ def parse_json_response(raw_content: str):
         raise
 
 
-def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retries=3, temperature=0.5):
-    """统一调用大模型：重试 + 指数退避 + 速率限制 + 空值判断 + JSON 解析 + 备用模型降级"""
+def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retries=3, temperature=0.2, max_tokens=8192):
+    """统一调用大模型：重试 + 指数退避 + 速率限制 + 截断检测 + 空值判断 + JSON 解析 + 备用模型降级"""
     global _last_api_call_time
     last_err = None
     for attempt in range(max_retries):
@@ -105,10 +105,16 @@ def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retr
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=temperature
+                temperature=temperature,
+                max_tokens=max_tokens
             )
             _record_usage(logger, agent_name, response)
             raw = response.choices[0].message.content
+            finish = getattr(response.choices[0], "finish_reason", "")
+
+            # 输出被截断（撞到 max_tokens 上限）：内容不完整，不可采用，抛异常触发重试
+            if finish == "length":
+                raise ValueError(f"输出被截断（finish_reason=length，max_tokens={max_tokens}）")
 
             if need_json:
                 return parse_json_response(raw)
@@ -134,10 +140,15 @@ def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retr
             response = client.chat.completions.create(
                 model=backup,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=temperature
+                temperature=temperature,
+                max_tokens=max_tokens
             )
             _record_usage(logger, agent_name, response)
             raw = response.choices[0].message.content
+            finish = getattr(response.choices[0], "finish_reason", "")
+
+            if finish == "length":
+                raise ValueError(f"输出被截断（finish_reason=length，max_tokens={max_tokens}）")
 
             if need_json:
                 return parse_json_response(raw)
