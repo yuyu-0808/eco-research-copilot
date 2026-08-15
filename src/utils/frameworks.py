@@ -11,6 +11,7 @@
 """
 
 import os
+import re
 
 import yaml
 
@@ -100,13 +101,20 @@ def list_frameworks() -> list:
     return result
 
 
+def _kw_hit(keyword: str, text: str) -> bool:
+    """关键词命中判断：纯 ASCII 关键词用词边界匹配，避免 ai/it/5g 等短词误命中。"""
+    if keyword.isascii():
+        return re.search(rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])", text) is not None
+    return keyword in text
+
+
 def match_framework(topic: str) -> dict:
     """按课题关键词匹配最贴合的行研框架；匹配不到返回通用框架。"""
     t = (topic or "").lower()
     best = None
     best_hits = 0
     for fw in INDUSTRY_FRAMEWORKS.values():
-        hits = sum(1 for k in fw.get("keywords", []) if k in t)
+        hits = sum(1 for k in fw.get("keywords", []) if _kw_hit(k, t))
         if hits > best_hits:
             best_hits = hits
             best = fw
@@ -148,16 +156,16 @@ def build_plan(topic: str, framework: dict = None) -> dict:
     }
 
 
-# 比例型指标关键词：命中则说明该章核心指标应为 0-100% 口径
-_RATIO_METRIC_KEYS = [
-    "渗透率", "增速", "增长率", "份额", "占比", "集中度",
-    "毛利率", "净利率", "利润率", "复购率", "转化率", "国产化率",
-    "利用率", "付费率",
+# 有界比例型指标关键词：命中则说明该章核心指标应为 0-100% 口径（越界拦截）
+# 注意：增速 / 增长率 / 毛利率 / 净利率 / 利润率可 >100% 或为负，故不在此列，避免误报
+_BOUNDED_RATIO_KEYS = [
+    "渗透率", "份额", "占比", "集中度", "国产化率",
+    "利用率", "付费率", "复购率", "转化率",
 ]
 
 
 def _build_value_spec(metrics: list) -> dict:
     """根据核心指标判断该章是否需要比例口径约束（0-100% 越界拦截）。"""
-    if any(any(k in (m or "") for k in _RATIO_METRIC_KEYS) for m in metrics):
+    if any(any(k in (m or "") for k in _BOUNDED_RATIO_KEYS) for m in metrics):
         return {"ratio_range": [0, 100], "unit": "%"}
     return None

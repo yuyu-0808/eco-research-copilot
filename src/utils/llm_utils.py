@@ -3,7 +3,6 @@
 供各 Agent 复用，避免重复实现，根治 JSON 解析类问题（空返回、未闭合字符串等）。
 """
 import json
-import re
 import time
 
 from src.utils.config import Config
@@ -30,15 +29,10 @@ def _record_usage(logger, agent_name, response):
 
 
 def fix_json(broken_json: str):
-    """尝试修复不完整的 JSON：补右括号、补未闭合的引号"""
+    """尝试修复不完整的 JSON：补右括号/方括号、补未闭合的引号"""
     if not broken_json:
         return None
     try:
-        open_braces = broken_json.count('{')
-        close_braces = broken_json.count('}')
-        if open_braces > close_braces:
-            broken_json += '}' * (open_braces - close_braces)
-
         in_string = False
         escape_next = False
         for char in broken_json:
@@ -53,27 +47,64 @@ def fix_json(broken_json: str):
         if in_string:
             broken_json += '"'
 
-        open_braces = broken_json.count('{')
-        close_braces = broken_json.count('}')
-        if open_braces > close_braces:
-            broken_json += '}' * (open_braces - close_braces)
+        for open_ch, close_ch in (('{', '}'), ('[', ']')):
+            n_open = broken_json.count(open_ch)
+            n_close = broken_json.count(close_ch)
+            if n_open > n_close:
+                broken_json += close_ch * (n_open - n_close)
         return broken_json
     except Exception:
         return None
 
 
 def parse_json_response(raw_content: str):
-    """从模型输出中提取并解析 JSON（容忍代码块、前后杂讯、不完整 JSON）"""
+    """从模型输出中提取并解析 JSON（容忍代码块、前后杂讯、不完整 JSON，支持对象与数组）"""
     if not raw_content or not raw_content.strip():
         raise ValueError("模型返回空内容")
     cleaned = raw_content.strip()
-    match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-    if match:
-        cleaned = match.group(0)
+
+    # 定位最外层 JSON：第一个 { 或 [（谁更靠前谁就是最外层结构）
+    brace = cleaned.find("{")
+    bracket = cleaned.find("[")
+    if bracket != -1 and (brace == -1 or bracket < brace):
+        open_ch, close_ch = "[", "]"
+        start = bracket
+    elif brace != -1:
+        open_ch, close_ch = "{", "}"
+        start = brace
+    else:
+        raise ValueError("模型输出中未找到 JSON")
+
+    # 括号平衡匹配，跳过字符串内的同名括号，截取完整的最外层结构
+    depth = 0
+    in_str = False
+    escape = False
+    end = -1
+    for i in range(start, len(cleaned)):
+        c = cleaned[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif c == "\\":
+                escape = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == open_ch:
+            depth += 1
+        elif c == close_ch:
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+
+    candidate = cleaned[start:end + 1] if end != -1 else cleaned[start:]
     try:
-        return json.loads(cleaned)
+        return json.loads(candidate)
     except json.JSONDecodeError:
-        fixed = fix_json(cleaned)
+        fixed = fix_json(candidate)
         if fixed:
             try:
                 return json.loads(fixed)
@@ -92,6 +123,8 @@ def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retr
 
             if attempt > 0:
                 wait = 2 ** attempt
+                max_wait = getattr(Config, 'MAX_RETRY_WAIT_SECONDS', 30) or 30
+                wait = min(wait, max_wait)
                 logger.log_event(agent_name, "INFO", f"限流保护：等待{wait}秒后重试...")
                 time.sleep(wait)
 

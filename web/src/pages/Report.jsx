@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiGet, apiPost, connectWS, getToken } from '../api.js'
 import { splitReport, extractHeadings, renderMarkdown, tableToHtml } from '../markdown.js'
 import { chartToOption } from '../charts.js'
@@ -25,7 +25,6 @@ const RULE_ORDER = [
 export default function Report({ id }) {
   const [detail, setDetail] = useState(null)
   const [logs, setLogs] = useState([])
-  const [ws, setWs] = useState(null)
   const [err, setErr] = useState('')
 
   async function load() {
@@ -51,7 +50,6 @@ export default function Report({ id }) {
           load()
         }
       })
-      setWs(ws)
       return () => ws.close()
     }
   }, [detail?.checkpoint?.status])
@@ -181,9 +179,20 @@ function ReportBody({ result }) {
   const [activeRef, setActiveRef] = useState(null)
   const bodyRef = useRef(null)
 
-  // 给 ## 标题加锚点 id（与左侧目录一一对应）
-  let hCounter = 0
-  const anchoredMd = md.replace(/^##\s+(.+)$/gm, (m, text) => `## <a id="sec-${hCounter++}"></a>${text}`)
+  // 给 ## 标题加锚点 id（与左侧目录一一对应）；缓存避免点击引用时全量重算
+  const anchoredMd = useMemo(() => {
+    let hCounter = 0
+    return md.replace(/^##\s+(.+)$/gm, (m, text) => `## <a id="sec-${hCounter++}"></a>${text}`)
+  }, [md])
+
+  // 切分正文并按需预渲染 HTML，避免每次点击引用都重新 marked.parse 全文
+  const parts = useMemo(
+    () => splitReport(anchoredMd).map((part) => ({
+      ...part,
+      html: part.kind === 'text' ? renderMarkdown(part.text) : null,
+    })),
+    [anchoredMd],
+  )
 
   // 引用标号点击 → 弹出信源详情
   useEffect(() => {
@@ -234,7 +243,7 @@ function ReportBody({ result }) {
 
         <div className="sec-title">正文</div>
         <div className="card report-body" ref={bodyRef}>
-          {splitReport(anchoredMd).map((part, i) => {
+          {parts.map((part, i) => {
             if (part.kind === 'CHART') {
               const idx = part.index - 1
               const chart = charts[idx]
@@ -258,7 +267,7 @@ function ReportBody({ result }) {
                 </div>
               )
             }
-            return <div key={`x${i}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(part.text) }} />
+            return <div key={`x${i}`} dangerouslySetInnerHTML={{ __html: part.html }} />
           })}
         </div>
 

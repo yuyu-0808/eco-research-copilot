@@ -27,7 +27,7 @@ _ENERGY_UNIT = {
 }
 
 # 数值前缀匹配（单位前的大数前缀）
-_NUM_PREFIX = re.compile(r"^([0-9]+(?:\.[0-9]+)?)\s*(亿|万)?(.*)$")
+_NUM_PREFIX = re.compile(r"^(-?[0-9]+(?:\.[0-9]+)?)\s*(亿|万)?(.*)$")
 
 
 @dataclass
@@ -68,8 +68,8 @@ def normalize_value(s) -> Optional[NormalizedValue]:
         return None
     low = text.lower()
 
-    # 1. 百分比："30%" / "30.5%"
-    m = re.match(r"^([0-9]+(?:\.[0-9]+)?)%$", text)
+    # 1. 百分比："30%" / "30.5%" / "-20%"
+    m = re.match(r"^(-?[0-9]+(?:\.[0-9]+)?)%$", text)
     if m:
         return NormalizedValue(float(m.group(1)) / 100.0, "", True)
 
@@ -209,29 +209,3 @@ def normalize_period(s) -> Optional[NormalizedPeriod]:
 
     # 全年
     return NormalizedPeriod(year, 1, 12)
-
-
-# ----------------------------------------------------------------------
-# 可比对判断
-# ----------------------------------------------------------------------
-
-def values_equal(v1, v2) -> bool:
-    """判断两个数值归一化后是否「语义相等」（同值同单位）。
-
-    用于矛盾检测：语义相等则不判矛盾，语义不同才判矛盾。
-    """
-    n1 = normalize_value(v1)
-    n2 = normalize_value(v2)
-    if n1 is None or n2 is None:
-        # 无法归一化时，退回字符串比较
-        return str(v1).strip() == str(v2).strip()
-    return n1.key() == n2.key()
-
-
-def periods_overlap(p1, p2) -> bool:
-    """判断两个时间口径是否有重叠（用于时间维度的一致性判断）。"""
-    n1 = normalize_period(p1)
-    n2 = normalize_period(p2)
-    if n1 is None or n2 is None:
-        return False
-    return not (n1.end_month < n2.start_month or n2.end_month < n1.start_month)

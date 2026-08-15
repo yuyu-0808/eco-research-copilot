@@ -14,6 +14,8 @@
 供「信源研究员」采集时评级、「事实稽核官」分级采信使用。
 """
 
+from functools import lru_cache
+
 # A 级：一手官方 / 权威机构
 _SOURCE_A = [
     "gov", "edu", "oecd", "un.org", "worldbank", "imf.org", "who.int",
@@ -82,6 +84,7 @@ def source_grade(url: str = "", title: str = "") -> tuple:
     return "D", "一般来源"
 
 
+@lru_cache(maxsize=1)
 def load_source_skill_doc() -> str:
     """加载行研信源评级规范 skill 文档（skills/source_verification/SKILL.md），供 prompt 注入。"""
     import os

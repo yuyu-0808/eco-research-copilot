@@ -7,7 +7,6 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { apiGet, apiPost, apiPut } from '../api.js'
-import { TierBadge } from '../components.jsx'
 
 const STAGE_LABEL = { framework: '框架确认', materials: '素材确认', draft: '终稿确认' }
 const TIERS = ['A', 'B', 'C', 'D', 'E', 'F']

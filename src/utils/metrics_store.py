@@ -8,7 +8,7 @@
 """
 
 import os
-from datetime import datetime
+import tempfile
 
 from .normalizer import normalize_value, normalize_period
 from .investment_checks import classify_metric, metric_label
@@ -230,9 +230,14 @@ def export_excel(framework_key: str = None, out_path: str = None) -> str:
             r.get("saved_at", ""),
         ])
 
-    out_path = out_path or os.path.join(_DATA_DIR, "metrics_export.xlsx")
-    dirname = os.path.dirname(out_path)
-    if dirname:
-        os.makedirs(dirname, exist_ok=True)
+    if out_path is None:
+        # 用唯一临时名，避免并发导出互相覆盖；调用方负责在用后清理
+        os.makedirs(_DATA_DIR, exist_ok=True)
+        fd, out_path = tempfile.mkstemp(suffix=".xlsx", dir=_DATA_DIR)
+        os.close(fd)
+    else:
+        dirname = os.path.dirname(out_path)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
     wb.save(out_path)
     return out_path

@@ -339,14 +339,6 @@ def register_rule(name: str, func) -> None:
     _RULES.append((name, func))
 
 
-def rule(name: str):
-    """装饰器形式注册规则。"""
-    def deco(func):
-        register_rule(name, func)
-        return func
-    return deco
-
-
 # 内置四条规则注册（签名统一为 (evidence, framework_key)）
 register_rule("financial_reconciliation", lambda e, fw: check_financial_reconciliation(e))
 register_rule("industry_range", check_industry_range)

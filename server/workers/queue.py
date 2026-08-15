@@ -48,6 +48,3 @@ def cancel(project_id: str) -> bool:
     return False
 
 
-def running_ids() -> list:
-    """当前正在后台运行的任务 id 列表。"""
-    return [j.id for j in get_scheduler().get_jobs()]

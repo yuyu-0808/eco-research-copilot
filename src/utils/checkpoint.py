@@ -173,10 +173,11 @@ class Checkpoint:
 
     def check_pause(self) -> None:
         """阶段边界调用：优先响应终止信号（彻底停止），其次响应暂停请求（可续跑）。"""
-        if self.stop_requested():
+        state = self.load()
+        if state.get("stop_requested"):
             self.set_status("stopped")
             raise StopRequested()
-        if self.pause_requested():
+        if state.get("pause_requested"):
             self.set_status("paused")
             raise PauseRequested()
 

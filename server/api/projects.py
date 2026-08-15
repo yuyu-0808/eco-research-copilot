@@ -22,15 +22,13 @@ from src.utils.checkpoint import Checkpoint
 from server.workers import queue
 from server.workers.runner import run_research
 from server.response import ok
+from server.paths import resolve_project_dir
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
 def _dir(project_id: str) -> str:
-    d = os.path.join(PROJECTS_DIR, project_id)
-    if not os.path.isdir(d):
-        raise HTTPException(404, f"项目不存在: {project_id}")
-    return d
+    return resolve_project_dir(project_id)
 
 
 def _new_project_id() -> str:
@@ -46,10 +44,9 @@ def _new_project_id() -> str:
 
 @router.get("")
 def get_projects(include_archived: bool = False):
-    projects = list_projects()
-    if not include_archived:
-        projects = [p for p in projects if not p.get("archived")]
-    return ok({"projects": projects, "metrics": dashboard_metrics()})
+    all_projects = list_projects()
+    projects = [p for p in all_projects if not p.get("archived")] if not include_archived else all_projects
+    return ok({"projects": projects, "metrics": dashboard_metrics(all_projects)})
 
 
 @router.post("")

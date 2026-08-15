@@ -4,24 +4,20 @@
 立即返回，页面关闭也不影响任务继续跑；进度通过 checkpoint + WebSocket 查询。
 """
 
-import os
-
 from fastapi import APIRouter, HTTPException
 
-from src.ui.helpers import load_checkpoint, load_result, PROJECTS_DIR
+from src.ui.helpers import load_checkpoint, load_result
 from src.utils.checkpoint import Checkpoint
 from server.workers import queue
 from server.workers.runner import run_research
 from server.response import ok
+from server.paths import resolve_project_dir
 
 router = APIRouter(prefix="/api/projects", tags=["research"])
 
 
 def _dir(project_id: str) -> str:
-    d = os.path.join(PROJECTS_DIR, project_id)
-    if not os.path.isdir(d):
-        raise HTTPException(404, f"项目不存在: {project_id}")
-    return d
+    return resolve_project_dir(project_id)
 
 
 def _topic(project_id: str, d: str) -> str:

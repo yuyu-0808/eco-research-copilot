@@ -1,7 +1,10 @@
 """指标库 API：检索 + 手动录入/编辑/删除 + 趋势图 + Excel 导出（数据飞轮的可视化入口）。"""
 
+import os
+
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 
 from src.utils.metrics_store import (
     query_metrics, export_excel, _all_keys,
@@ -80,10 +83,11 @@ def remove_metric(metric_id: int):
 
 @router.get("/export")
 def export(framework_key: str = Query(None)):
-    """把指标库导出为 Excel（.xlsx）。"""
+    """把指标库导出为 Excel（.xlsx）；临时文件在响应后自动清理。"""
     path = export_excel(framework_key)
     return FileResponse(
         path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename="指标库.xlsx",
+        background=BackgroundTask(os.remove, path),
     )

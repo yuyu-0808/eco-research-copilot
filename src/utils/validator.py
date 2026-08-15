@@ -9,7 +9,6 @@
 """
 
 from .evidence import EvidenceRecord, TIER_LABEL
-from .source_grade import source_grade
 from .normalizer import normalize_value
 from .investment_checks import run_investment_checks
 from .metrics_store import cross_validate as historical_cross

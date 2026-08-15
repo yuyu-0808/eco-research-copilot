@@ -1,5 +1,6 @@
 import os
 import re
+from functools import lru_cache
 from openai import OpenAI
 from src.utils.config import Config
 from src.utils.logger import AgentLogger
@@ -40,6 +41,7 @@ register_renderer("docx", _render_docx)
 register_renderer("markdown", _render_markdown)
 
 
+@lru_cache(maxsize=1)
 def _load_chart_skill_doc() -> str:
     """加载行研图表规范 skill 文档（skills/chart_spec/SKILL.md），供 prompt 注入。"""
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

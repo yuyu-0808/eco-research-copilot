@@ -56,6 +56,7 @@ class ResearchOrchestrator:
         state["topic"] = user_topic
         state["status"] = "running"
         state["pause_requested"] = False
+        state["stop_requested"] = False
         if not self.resume:
             state["stages"] = {s: {"status": "pending", "data": None} for s in self.ckpt.STAGES}
             state["current_stage"] = "architect"
@@ -201,14 +202,16 @@ class ResearchOrchestrator:
             verify_result = self.auditor.verify_data(plan_data, collect_result)
             is_pass = verify_result.get("is_pass", False)
 
+            # 每轮都记录最新结果，无论是否达标；非严格模式轮次耗尽时最后一轮证据也能保留
+            verified_context = verify_result.get("verified_context", "")
+            evidence_list = verify_result.get("evidence", [])
+            conflicts_list = verify_result.get("conflicts", [])
+            reasons_list = verify_result.get("reasons", [])
+            coverage_map = verify_result.get("coverage", {})
+            warnings_list = verify_result.get("warnings", [])
+            checks_map = verify_result.get("checks", {})
+
             if is_pass:
-                verified_context = verify_result.get("verified_context", "")
-                evidence_list = verify_result.get("evidence", [])
-                conflicts_list = verify_result.get("conflicts", [])
-                reasons_list = verify_result.get("reasons", [])
-                coverage_map = verify_result.get("coverage", {})
-                warnings_list = verify_result.get("warnings", [])
-                checks_map = verify_result.get("checks", {})
                 self.logger.log_event("Orchestrator", "SUCCESS", "✅ 数据质量达标，跳出内循环。")
                 break
             else:
@@ -299,9 +302,11 @@ class ResearchOrchestrator:
 
         self.ckpt.mark_done("write", {"markdown_report": markdown_report, "is_pass": is_pass, "round": current_round})
         # 消费过的打回意见清空，避免下次续跑重复消费
+        # 注意：必须基于 mark_done 之后的新鲜状态回写，避免陈旧 state 覆盖掉刚完成的 write 阶段
         if state.get("draft_feedback"):
-            state["draft_feedback"] = ""
-            self.ckpt.save(state)
+            fresh = self.ckpt.load()
+            fresh["draft_feedback"] = ""
+            self.ckpt.save(fresh)
         self._maybe_review("draft")
         return markdown_report
 

@@ -9,19 +9,17 @@ import os
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from src.ui.helpers import load_result, PROJECTS_DIR
+from src.ui.helpers import load_result
 from src.utils.config import Config
 from src.tools.pdf_writer import generate_pdf
 from server.response import ok
+from server.paths import resolve_project_dir, resolve_report_file
 
 router = APIRouter(prefix="/api/projects/{project_id}/export", tags=["export"])
 
 
 def _dir(project_id: str) -> str:
-    d = os.path.join(PROJECTS_DIR, project_id)
-    if not os.path.isdir(d):
-        raise HTTPException(404, f"项目不存在: {project_id}")
-    return d
+    return resolve_project_dir(project_id)
 
 
 def _result(project_id: str) -> dict:
@@ -39,6 +37,8 @@ def export_docx(project_id: str):
     docx_path = result.get("docx_path", "")
     if not docx_path or not os.path.exists(docx_path):
         raise HTTPException(404, "Word 文件不存在，可能渲染阶段未完成")
+    # 校验 docx 路径必须位于项目目录内，防止篡改 result.json 读取任意文件
+    docx_path = resolve_report_file(_dir(project_id), docx_path)
     return FileResponse(
         docx_path,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

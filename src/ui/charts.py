@@ -4,6 +4,8 @@ Vega-Lite 由 Streamlit 内置渲染（st.vega_lite_chart），无需额外依�
 """
 import re
 
+from .helpers import html_escape
+
 BRAND = "#1E3A8A"
 PALETTE = ["#1E3A8A", "#22A06B", "#E09A2B", "#D6455A", "#5B8DEF", "#7C5BE0", "#3FB6C9", "#C778C9"]
 FONT = "Plus Jakarta Sans, PingFang SC, Microsoft YaHei, sans-serif"
@@ -104,25 +106,16 @@ def table_to_html(table):
     if headers:
         parts.append(
             "<thead><tr>"
-            + "".join(f"<th>{html_escape_here(h)}</th>" for h in headers)
+            + "".join(f"<th>{html_escape(h)}</th>" for h in headers)
             + "</tr></thead>"
         )
     parts.append("<tbody>")
     for r in rows:
         parts.append(
-            "<tr>" + "".join(f"<td>{html_escape_here(c)}</td>" for c in r) + "</tr>"
+            "<tr>" + "".join(f"<td>{html_escape(c)}</td>" for c in r) + "</tr>"
         )
     parts.append("</tbody></table>")
     return "".join(parts)
-
-
-def html_escape_here(s):
-    return (
-        str(s)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
 
 
 def split_report(md):

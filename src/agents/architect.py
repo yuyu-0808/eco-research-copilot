@@ -90,23 +90,20 @@ class ArchitectAgent:
 
         严格输出 JSON：{{"research_requirements": [...]}}
         """
-        try:
-            result = call_llm(
-                self.client, self.model, self.logger, "课题架构师", prompt, need_json=True
-            )
-            refined = result.get("research_requirements", [])
-            if not refined or len(refined) != len(requirements):
-                self.logger.log_event("课题架构师", "WARNING", "LLM 微调条数不匹配，回退框架原值")
-                return plan_data
-            # 强制保护：question_id / section / 约束字段以框架为准，只采纳 text/metrics 微调
-            for i, item in enumerate(refined):
-                if i >= len(requirements):
-                    break
-                base = requirements[i]
-                base["text"] = item.get("text", base["text"])
-                base["metrics"] = item.get("metrics", base["metrics"])
-            plan_data["research_requirements"] = requirements
-            self.logger.log_event("课题架构师", "INFO", "LLM 微调完成（结构不变，问题表述已行业化）")
+        result = call_llm(
+            self.client, self.model, self.logger, "课题架构师", prompt, need_json=True
+        )
+        refined = result.get("research_requirements", [])
+        if not refined or len(refined) != len(requirements):
+            self.logger.log_event("课题架构师", "WARNING", "LLM 微调条数不匹配，回退框架原值")
             return plan_data
-        except Exception:
-            raise
+        # 强制保护：question_id / section / 约束字段以框架为准，只采纳 text/metrics 微调
+        for i, item in enumerate(refined):
+            if i >= len(requirements):
+                break
+            base = requirements[i]
+            base["text"] = item.get("text", base["text"])
+            base["metrics"] = item.get("metrics", base["metrics"])
+        plan_data["research_requirements"] = requirements
+        self.logger.log_event("课题架构师", "INFO", "LLM 微调完成（结构不变，问题表述已行业化）")
+        return plan_data

@@ -5,7 +5,7 @@ from src.utils.logger import AgentLogger
 from src.tools.web_search import WebSearcher
 from src.utils.llm_utils import call_llm
 from src.utils.source_grade import source_grade, load_source_skill_doc
-from src.utils.evidence import EvidenceRecord, records_to_text
+from src.utils.evidence import EvidenceRecord
 from src.utils.validator import infer_publisher
 
 

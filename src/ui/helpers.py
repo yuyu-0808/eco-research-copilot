@@ -4,7 +4,6 @@
 """
 import json
 import os
-import re
 from datetime import datetime
 
 from src.utils.checkpoint import Checkpoint
@@ -124,14 +123,6 @@ def load_checkpoint(project_dir):
     return ck.load()
 
 
-def load_evidence(project_dir):
-    """加载项目保存的证据溯源数据（List[dict]，EvidenceRecord 序列化结果）。"""
-    result = load_result(project_dir)
-    if not result:
-        return []
-    return result.get("evidence", []) or []
-
-
 def save_result(project_dir, project_id, topic, final_result):
     """把一次完整调研结果持久化为 result.json，供历史回看。"""
     os.makedirs(project_dir, exist_ok=True)
@@ -240,9 +231,13 @@ def list_projects():
     return projects
 
 
-def dashboard_metrics():
-    """计算工作台仪表盘指标。图表/表格累计只统计有完整 result.json 的项目，避免历史老项目显示 0 张。"""
-    projects = list_projects()
+def dashboard_metrics(projects=None):
+    """计算工作台仪表盘指标。图表/表格累计只统计有完整 result.json 的项目，避免历史老项目显示 0 张。
+
+    可传入已计算的 list_projects() 结果复用，避免重复扫描磁盘。
+    """
+    if projects is None:
+        projects = list_projects()
     total = len(projects)
     completed = sum(1 for p in projects if p["status"] == "completed")
     charts = sum(p["n_charts"] for p in projects if p["has_result"])
@@ -289,13 +284,3 @@ def derive_stages(entries):
                 if states[i] == "active":
                     states[i] = "error"
     return states
-
-
-def current_round(entries):
-    """提取当前质检循环轮次 'N/M'。"""
-    found = None
-    for e in entries:
-        m = re.search(r"第 (\d+)/(\d+) 轮", e.get("details", ""))
-        if m:
-            found = m
-    return found

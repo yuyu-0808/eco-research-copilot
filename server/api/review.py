@@ -9,26 +9,22 @@
 由于确认点都在下游阶段执行之前，编辑「实时生效」，无需复位下游阶段。
 """
 
-import os
-
 from fastapi import APIRouter, HTTPException
 
-from src.ui.helpers import load_checkpoint, PROJECTS_DIR
+from src.ui.helpers import load_checkpoint
 from src.utils.checkpoint import Checkpoint
 from src.utils.frameworks import _build_value_spec
 from src.utils.evidence import EvidenceRecord, records_to_text
 from server.workers import queue
 from server.workers.runner import run_research
 from server.response import ok
+from server.paths import resolve_project_dir
 
 router = APIRouter(prefix="/api/projects/{project_id}/review", tags=["review"])
 
 
 def _dir(project_id: str) -> str:
-    d = os.path.join(PROJECTS_DIR, project_id)
-    if not os.path.isdir(d):
-        raise HTTPException(404, f"项目不存在: {project_id}")
-    return d
+    return resolve_project_dir(project_id)
 
 
 def _state(project_id: str) -> tuple:
