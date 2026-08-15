@@ -36,6 +36,7 @@ class Checkpoint:
             "pause_requested": False,
             "current_stage": "architect",
             "review_stage": "",    # 人工确认检查点："" | framework | materials | draft
+            "framework_key": "",   # 用户选择的行业框架 key；空 = 自动匹配
             "stages": {s: {"status": "pending", "data": None} for s in self.STAGES},
         }
 
@@ -55,6 +56,7 @@ class Checkpoint:
         state.setdefault("pause_requested", False)
         state.setdefault("current_stage", "architect")
         state.setdefault("review_stage", "")
+        state.setdefault("framework_key", "")
         stages = state.setdefault("stages", {})
         for s in self.STAGES:
             stages.setdefault(s, {"status": "pending", "data": None})

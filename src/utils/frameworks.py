@@ -19,34 +19,36 @@ _FRAMEWORKS_DIR = os.path.join(_ROOT, "frameworks")
 
 
 def load_frameworks():
-    """从 frameworks/ 目录加载全部行业框架（含 generic 兜底）。
+    """从 frameworks/ 目录（含 custom/ 子目录）加载全部行业框架（含 generic 兜底）。
 
     返回 (industry_frameworks: dict, generic_framework: dict)。
     """
     industry = {}
     generic = None
     if os.path.isdir(_FRAMEWORKS_DIR):
-        for fn in sorted(os.listdir(_FRAMEWORKS_DIR)):
-            if not (fn.endswith(".yaml") or fn.endswith(".yml")):
-                continue
-            path = os.path.join(_FRAMEWORKS_DIR, fn)
-            try:
-                with open(path, encoding="utf-8") as f:
-                    data = yaml.safe_load(f)
-            except (OSError, yaml.YAMLError):
-                continue
-            if not isinstance(data, dict) or not data.get("key"):
-                continue
-            data.setdefault("keywords", [])
-            data.setdefault("sections", [])
-            data.setdefault("metrics_library", {})
-            data.setdefault("analysis_models", [])
-            data.setdefault("supply_chain", {})
-            data.setdefault("key_players", [])
-            if data["key"] == "generic":
-                generic = data
-            else:
-                industry[data["key"]] = data
+        for root, _dirs, files in os.walk(_FRAMEWORKS_DIR):
+            for fn in sorted(files):
+                if not (fn.endswith(".yaml") or fn.endswith(".yml")):
+                    continue
+                path = os.path.join(root, fn)
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        data = yaml.safe_load(f)
+                except (OSError, yaml.YAMLError):
+                    continue
+                if not isinstance(data, dict) or not data.get("key"):
+                    continue
+                data.setdefault("keywords", [])
+                data.setdefault("sections", [])
+                data.setdefault("metrics_library", {})
+                data.setdefault("analysis_models", [])
+                data.setdefault("supply_chain", {})
+                data.setdefault("key_players", [])
+                data["_source"] = os.path.relpath(path, _ROOT)
+                if data["key"] == "generic":
+                    generic = data
+                else:
+                    industry[data["key"]] = data
     if generic is None:
         generic = _DEFAULT_GENERIC
     return industry, generic
@@ -73,6 +75,29 @@ _DEFAULT_GENERIC = {
 
 # 模块加载时读取一次
 INDUSTRY_FRAMEWORKS, GENERIC_FRAMEWORK = load_frameworks()
+
+
+def reload_frameworks():
+    """重新加载框架目录（上传自定义框架后热更新）。返回行业框架 dict。"""
+    global INDUSTRY_FRAMEWORKS, GENERIC_FRAMEWORK
+    INDUSTRY_FRAMEWORKS, GENERIC_FRAMEWORK = load_frameworks()
+    return INDUSTRY_FRAMEWORKS
+
+
+def get_framework(key: str):
+    """按 key 取框架；找不到返回 None。"""
+    if not key:
+        return None
+    if key == "generic":
+        return GENERIC_FRAMEWORK
+    return INDUSTRY_FRAMEWORKS.get(key)
+
+
+def list_frameworks() -> list:
+    """返回全部框架（行业 + 通用），供前端选择器与预览。"""
+    result = [dict(fw) for fw in INDUSTRY_FRAMEWORKS.values()]
+    result.append(dict(GENERIC_FRAMEWORK))
+    return result
 
 
 def match_framework(topic: str) -> dict:

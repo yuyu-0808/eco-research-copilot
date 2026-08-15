@@ -3,7 +3,7 @@ from openai import OpenAI
 from src.utils.config import Config
 from src.utils.logger import AgentLogger
 from src.utils.llm_utils import call_llm
-from src.utils.frameworks import match_framework, build_plan
+from src.utils.frameworks import match_framework, build_plan, get_framework
 
 
 class ArchitectAgent:
@@ -12,18 +12,22 @@ class ArchitectAgent:
         self.client = OpenAI(api_key=Config.DEEPSEEK_API_KEY, base_url=Config.BASE_URL)
         self.model = Config.MODEL_NAME
 
-    def generate_plan(self, user_topic: str) -> dict:
+    def generate_plan(self, user_topic: str, framework_key: str = "") -> dict:
         """
         内核：内置行研框架兜底 + LLM 仅微调。
 
         保证：
         - 输出结构 100% 符合行研规范（框架兜底）；
         - LLM 完全失败时，仍能返回标准研究计划。
+
+        支持 framework_key 显式指定框架（前端选择器）；空则按课题自动匹配。
         """
         self.logger.log_event("课题架构师", "START", f"开始按行研框架拆解课题: {user_topic}")
 
         # 1. 匹配内置框架，生成标准研究计划（纯规则，不依赖 LLM）
-        framework = match_framework(user_topic)
+        framework = get_framework(framework_key) if framework_key else match_framework(user_topic)
+        if framework is None:
+            framework = match_framework(user_topic)
         plan_data = build_plan(user_topic, framework)
         self.logger.log_event(
             "课题架构师", "INFO",

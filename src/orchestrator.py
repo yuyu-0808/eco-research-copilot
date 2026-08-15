@@ -160,7 +160,8 @@ class ResearchOrchestrator:
             self.logger.log_event("Orchestrator", "INFO", "♻️ 断点续跑：阶段「架构」已完成，跳过。")
             return data
         self.ckpt.check_pause()
-        plan_data = self.architect.generate_plan(user_topic)
+        framework_key = state.get("framework_key", "")
+        plan_data = self.architect.generate_plan(user_topic, framework_key=framework_key)
         self.ckpt.mark_done("architect", plan_data)
         self._maybe_review("framework")
         return plan_data

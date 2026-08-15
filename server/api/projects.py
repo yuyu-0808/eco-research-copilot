@@ -18,6 +18,7 @@ from src.ui.helpers import (
     PROJECTS_DIR,
 )
 from src.utils import db
+from src.utils.checkpoint import Checkpoint
 from server.workers import queue
 from server.response import ok
 
@@ -42,12 +43,20 @@ def create_project(payload: dict = None):
     topic = (topic or "").strip()
     if not topic:
         raise HTTPException(400, "topic 不能为空")
+    framework_key = ((payload or {}).get("framework_key") or "").strip()
     project_id = f"Project_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    os.makedirs(os.path.join(PROJECTS_DIR, project_id), exist_ok=True)
+    project_dir = os.path.join(PROJECTS_DIR, project_id)
+    os.makedirs(project_dir, exist_ok=True)
+    # 用户显式选择的框架 key 写入 checkpoint（空 = 自动匹配）
+    if framework_key:
+        ck = Checkpoint(project_dir)
+        state = ck.empty_state()
+        state["framework_key"] = framework_key
+        ck.save(state)
     # 项目元信息入 SQLite（checkpoint 中间状态仍走磁盘 JSON）
     db.project_upsert(project_id, topic=topic, status="running",
-                      checkpoint_path=os.path.join(PROJECTS_DIR, project_id, "checkpoint.json"))
-    return ok({"project_id": project_id, "topic": topic})
+                      checkpoint_path=os.path.join(project_dir, "checkpoint.json"))
+    return ok({"project_id": project_id, "topic": topic, "framework_key": framework_key})
 
 
 @router.get("/{project_id}")
