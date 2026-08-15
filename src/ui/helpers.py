@@ -195,7 +195,7 @@ def list_projects():
             ck_status = ck_state.get("status")
             if not completed and any(
                 (ck_state.get("stages", {}).get(s) or {}).get("status") == "done"
-                for s in ("plan", "collect", "analyze", "format")
+                for s in Checkpoint.STAGES
             ):
                 resumable = True
 

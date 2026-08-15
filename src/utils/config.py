@@ -29,6 +29,9 @@ class Config:
     # 报告正文生成模式：standard（一次性生成，快）/ deep（分章生成，更充实）
     REPORT_MODE = os.getenv("REPORT_MODE", "standard")
 
+    # 阶段级自动重试次数：单个阶段因超时 / API 异常失败后自动重试 N 次（在 call_llm 内部重试之上再加一层兜底）
+    STAGE_RETRY = int(os.getenv("STAGE_RETRY", "2"))
+
     # 人机协同模式：auto（全自动，默认）/ manual（三阶段确认：框架→素材→终稿）
     REVIEW_MODE = os.getenv("REVIEW_MODE", "auto")
 

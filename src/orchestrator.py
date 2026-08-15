@@ -26,6 +26,28 @@ class ResearchOrchestrator:
     # ------------------------------------------------------------------
     # 主入口：6 步流水线 + 两个内循环
     # ------------------------------------------------------------------
+    def _with_retry(self, fn, stage, *args, **kwargs):
+        """阶段级自动重试：单个阶段因超时 / API 异常失败后自动重试，最多 STAGE_RETRY 次。
+
+        这是 call_llm 内部重试（3 次指数退避）之上的一层兜底——LLM 重试耗尽后
+        阶段仍抛错时，给整个阶段再来一轮全新尝试。
+        """
+        import time
+        max_attempts = Config.STAGE_RETRY + 1
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return fn(*args, **kwargs)
+            except PauseRequested:
+                raise
+            except Exception as e:
+                if attempt >= max_attempts:
+                    raise
+                self.logger.log_event(
+                    "Orchestrator", "WARNING",
+                    f"阶段「{stage}」第 {attempt} 次执行失败：{e}，剩余重试 {max_attempts - attempt} 次"
+                )
+                time.sleep(2)
+
     def run(self, user_topic: str) -> dict:
         self.logger.log_event("Orchestrator", "START", f"开始执行调研流水线: {user_topic}")
 
@@ -45,7 +67,7 @@ class ResearchOrchestrator:
             trace = {}
 
             t0 = time.time()
-            plan_data = self._stage_architect(user_topic)
+            plan_data = self._with_retry(self._stage_architect, "架构", user_topic)
             trace["architect"] = {
                 "elapsed": round(time.time() - t0, 2),
                 "outline": len(plan_data.get("outline", [])),
@@ -53,7 +75,7 @@ class ResearchOrchestrator:
             }
 
             t0 = time.time()
-            verified_context = self._stage_research_verify(plan_data)
+            verified_context = self._with_retry(self._stage_research_verify, "检索+稽核", plan_data)
             vd = self.ckpt.stage_data("verify") or {}
             trace["research_verify"] = {
                 "elapsed": round(time.time() - t0, 2),
@@ -65,7 +87,7 @@ class ResearchOrchestrator:
             }
 
             t0 = time.time()
-            structure = self._stage_structure(plan_data, verified_context)
+            structure = self._with_retry(self._stage_structure, "结构化提炼", plan_data, verified_context)
             trace["structure"] = {
                 "elapsed": round(time.time() - t0, 2),
                 "charts": len(structure.get("charts", [])),
@@ -73,14 +95,14 @@ class ResearchOrchestrator:
             }
 
             t0 = time.time()
-            markdown_report = self._stage_write_audit(plan_data, structure, verified_context)
+            markdown_report = self._with_retry(self._stage_write_audit, "撰写+逻辑校验", plan_data, structure, verified_context)
             trace["write_audit"] = {
                 "elapsed": round(time.time() - t0, 2),
                 "chars": len(markdown_report or ""),
             }
 
             t0 = time.time()
-            docx_path = self._stage_render(structure, markdown_report)
+            docx_path = self._with_retry(self._stage_render, "渲染", structure, markdown_report)
             trace["render"] = {
                 "elapsed": round(time.time() - t0, 2),
                 "docx": bool(docx_path),
