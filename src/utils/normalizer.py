@@ -95,6 +95,10 @@ def normalize_value(s) -> Optional[NormalizedValue]:
         big = m.group(2)
         unit = m.group(3) or ""
         scale = _BIG_UNIT.get(big, 1.0)
+        # 复合大数「万亿」：如「1.2万亿元」= 1.2 × 1e12 元（万 × 亿）
+        if big == "万" and unit.startswith("亿"):
+            scale *= 1e8
+            unit = unit[1:]
         value = num * scale
         # 单位归一：电力单位换算到 W，其余保留原始单位（去万/亿前缀）
         if unit.lower() in _ENERGY_UNIT:

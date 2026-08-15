@@ -11,6 +11,7 @@
 from .evidence import EvidenceRecord, TIER_LABEL
 from .source_grade import source_grade
 from .normalizer import normalize_value
+from .investment_checks import run_investment_checks
 
 _TIER_RANK = {"A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "F": 1, "": 0}
 
@@ -54,6 +55,9 @@ def validate(plan_data: dict, evidence: list) -> dict:
         reasons:   未达标原因列表（空 = 通过）
         coverage:  每个 question_id 的有效证据条数
         conflicts: 检测到的数值矛盾（同 section 同 claim 不同 value）
+        warnings:  投研专属校验预警（财务勾稽 / 行业区间 / 时间序列 / 多源偏差），
+                   仅预警不拦截，供用户采信决策
+        checks:    按规则分组的投研校验明细
     """
     requirements = plan_data.get("research_requirements", []) or []
     evidence = [e for e in (evidence or []) if isinstance(e, EvidenceRecord)]
@@ -101,6 +105,10 @@ def validate(plan_data: dict, evidence: list) -> dict:
     # 数值矛盾检测：同 section 同 claim 出现不同 value → 标红
     conflicts = _detect_conflicts(evidence)
 
+    # 投研专属校验（财务勾稽 / 行业区间 / 时间序列 / 多源偏差），仅预警不拦截
+    framework_key = (plan_data or {}).get("framework_key", "")
+    checks = run_investment_checks(evidence, framework_key)
+
     is_pass = (not reasons) and (not tier_gaps)
     reasons.extend(tier_gaps)
 
@@ -109,6 +117,8 @@ def validate(plan_data: dict, evidence: list) -> dict:
         "reasons": reasons,
         "coverage": coverage,
         "conflicts": conflicts,
+        "warnings": checks["warnings"],
+        "checks": {k: v for k, v in checks.items() if k != "warnings"},
     }
 
 

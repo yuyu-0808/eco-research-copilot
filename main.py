@@ -534,6 +534,8 @@ def render_overview():
                                 "conflicts": r.get("conflicts", []),
                                 "reasons": r.get("reasons", []),
                                 "coverage": r.get("coverage", {}),
+                                "warnings": r.get("warnings", []),
+                                "checks": r.get("checks", {}),
                                 "trace": r.get("trace", {}),
                                 "project_id": p["id"],
                                 "topic": p["topic"],
@@ -635,8 +637,12 @@ def _render_review_panel(project_id, project_dir, topic, ckpt, state):
         verify_data = (stages.get("verify") or {}).get("data") or {}
         ev_list = verify_data.get("evidence", [])
         conflicts = verify_data.get("conflicts", [])
+        warnings = verify_data.get("warnings", [])
         conflict_claims = {c.get("claim", "") for c in conflicts}
         st.markdown(f"已检索并稽核 **{len(ev_list)} 条有效证据**，可按章节审核、剔除无效信源")
+        if warnings:
+            with st.expander(f"🔎 投研校验预警 · {len(warnings)} 项"):
+                _render_warnings(warnings)
         keep_flags = []
         for i, ev in enumerate(ev_list):
             tier = ev.get("source_tier", "D")
@@ -753,8 +759,10 @@ def _finalize_completed(project_id, project_dir, topic, state):
     conflicts = verify_data.get("conflicts", [])
     reasons = verify_data.get("reasons", [])
     coverage = verify_data.get("coverage", {})
+    warnings = verify_data.get("warnings", [])
+    checks = verify_data.get("checks", {})
     trace = state.get("trace", {})
-    final_result = {"plan_data": plan_data, "ai_data": ai_data, "docx_path": docx_path, "evidence": evidence, "conflicts": conflicts, "reasons": reasons, "coverage": coverage, "trace": trace}
+    final_result = {"plan_data": plan_data, "ai_data": ai_data, "docx_path": docx_path, "evidence": evidence, "conflicts": conflicts, "reasons": reasons, "coverage": coverage, "warnings": warnings, "checks": checks, "trace": trace}
     save_result(project_dir, project_id, topic, final_result)
     st.session_state["active_run"] = None
     st.session_state["report_data"] = {
@@ -765,6 +773,8 @@ def _finalize_completed(project_id, project_dir, topic, state):
         "conflicts": conflicts,
         "reasons": reasons,
         "coverage": coverage,
+        "warnings": warnings,
+        "checks": checks,
         "trace": trace,
         "project_id": project_id,
         "topic": topic,
@@ -881,6 +891,30 @@ def render_new():
         st.rerun()
 
 
+def _render_warnings(warnings):
+    """渲染投研专属校验预警列表（财务勾稽 / 行业区间 / 时间序列 / 多源偏差）。"""
+    rule_label = {
+        "financial_reconciliation": "财务勾稽",
+        "industry_range": "行业区间",
+        "time_series": "时间序列",
+        "multi_source_deviation": "多源偏差",
+    }
+    for w in warnings:
+        if not isinstance(w, dict):
+            continue
+        rule = rule_label.get(w.get("rule", ""), w.get("rule", "校验"))
+        icon = "🔍 待核实" if w.get("level") == "verify" else "⚠ 预警"
+        st.caption(f"{icon}【{rule}】{w.get('message', '')}")
+        detail = w.get("detail", {}) or {}
+        sources = detail.get("sources") or []
+        if sources:
+            src_txt = "；".join(
+                f"{s.get('title', '') or '未署名'}（{s.get('tier', '?')}级）"
+                for s in sources if isinstance(s, dict)
+            )
+            st.caption(f"　↳ 来源：{src_txt}")
+
+
 def _render_trace_panel(data):
     """运行链路面板：每个阶段的耗时、关键产出与判定依据，全链路可追溯。"""
     trace = data.get("trace", {}) or {}
@@ -894,6 +928,7 @@ def _render_trace_panel(data):
     coverage = data.get("coverage", {}) or {}
     reasons = data.get("reasons", []) or []
     conflicts = data.get("conflicts", []) or []
+    warnings = data.get("warnings", []) or []
 
     stage_order = [
         ("architect", "① 课题架构 · 框架匹配"),
@@ -910,7 +945,7 @@ def _render_trace_panel(data):
         if key == "architect":
             summary.append(f"{t.get('outline', 0)} 章节 · {t.get('requirements', 0)} 必答问题")
         elif key == "research_verify":
-            summary.append(f"{t.get('rounds', '?')} 轮 · {t.get('evidence', 0)} 条证据 · {t.get('conflicts', 0)} 处矛盾")
+            summary.append(f"{t.get('rounds', '?')} 轮 · {t.get('evidence', 0)} 条证据 · {t.get('conflicts', 0)} 处矛盾 · {t.get('warnings', 0)} 项预警")
             summary.append("✅ 通过" if t.get("is_pass") else "⚠️ 未通过")
         elif key == "structure":
             summary.append(f"{t.get('charts', 0)} 图 · {t.get('tables', 0)} 表")
@@ -933,6 +968,8 @@ def _render_trace_panel(data):
                     st.caption("判定理由：" + "；".join(html_escape(r) for r in reasons))
                 if conflicts:
                     st.caption(f"检测到 {len(conflicts)} 处数值矛盾（详见下方溯源面板标红）")
+                if warnings:
+                    _render_warnings(warnings)
             elif key == "write_audit":
                 st.caption("撰写完成后经逻辑稽核交叉校验（论据溯源 + 逻辑矛盾排查）")
 
@@ -962,6 +999,12 @@ def render_report():
 
     # 运行链路追踪（每阶段耗时 / 产出 / 判定依据）
     _render_trace_panel(data)
+
+    # 投研校验预警（财务勾稽 / 行业区间 / 时间序列 / 多源偏差）
+    warnings = data.get("warnings", []) or []
+    if warnings:
+        with st.expander(f"🔎 投研校验预警 · {len(warnings)} 项（供采信决策，不阻断）"):
+            _render_warnings(warnings)
 
     # 目录
     headings = extract_headings(ai_data.get("markdown_report", ""))
@@ -1145,6 +1188,8 @@ def render_history():
                                 "conflicts": r.get("conflicts", []),
                                 "reasons": r.get("reasons", []),
                                 "coverage": r.get("coverage", {}),
+                                "warnings": r.get("warnings", []),
+                                "checks": r.get("checks", {}),
                                 "trace": r.get("trace", {}),
                                 "project_id": p["id"],
                                 "topic": p["topic"],

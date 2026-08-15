@@ -146,6 +146,8 @@ def save_result(project_dir, project_id, topic, final_result):
         "conflicts": final_result.get("conflicts", []) if isinstance(final_result, dict) else [],
         "reasons": final_result.get("reasons", []) if isinstance(final_result, dict) else [],
         "coverage": final_result.get("coverage", {}) if isinstance(final_result, dict) else {},
+        "warnings": final_result.get("warnings", []) if isinstance(final_result, dict) else [],
+        "checks": final_result.get("checks", {}) if isinstance(final_result, dict) else {},
         "trace": final_result.get("trace", {}) if isinstance(final_result, dict) else {},
     }
     path = os.path.join(project_dir, "result.json")

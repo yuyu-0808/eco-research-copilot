@@ -64,6 +64,8 @@ class AuditorAgent:
             "reasons": result["reasons"],
             "coverage": result["coverage"],
             "conflicts": result["conflicts"],
+            "warnings": result.get("warnings", []),
+            "checks": result.get("checks", {}),
         }
 
     def _extract_evidence(self, topic: str, requirements: list, raw_context: str) -> list:

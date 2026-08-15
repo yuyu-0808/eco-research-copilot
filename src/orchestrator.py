@@ -60,6 +60,7 @@ class ResearchOrchestrator:
                 "rounds": vd.get("round", 1),
                 "evidence": len(vd.get("evidence", [])),
                 "conflicts": len(vd.get("conflicts", [])),
+                "warnings": len(vd.get("warnings", [])),
                 "is_pass": vd.get("is_pass", False),
             }
 
@@ -162,6 +163,8 @@ class ResearchOrchestrator:
         conflicts_list = []
         reasons_list = []
         coverage_map = {}
+        warnings_list = []
+        checks_map = {}
 
         while current_round <= max_rounds:
             self.ckpt.check_pause()  # 每轮边界也支持暂停
@@ -177,6 +180,8 @@ class ResearchOrchestrator:
                 conflicts_list = verify_result.get("conflicts", [])
                 reasons_list = verify_result.get("reasons", [])
                 coverage_map = verify_result.get("coverage", {})
+                warnings_list = verify_result.get("warnings", [])
+                checks_map = verify_result.get("checks", {})
                 self.logger.log_event("Orchestrator", "SUCCESS", "✅ 数据质量达标，跳出内循环。")
                 break
             else:
@@ -205,6 +210,8 @@ class ResearchOrchestrator:
             "conflicts": conflicts_list,
             "reasons": reasons_list,
             "coverage": coverage_map,
+            "warnings": warnings_list,
+            "checks": checks_map,
         })
         self._maybe_review("materials")
         return verified_context

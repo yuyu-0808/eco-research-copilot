@@ -23,6 +23,7 @@
 
 INDUSTRY_FRAMEWORKS = {
     "new_energy": {
+        "key": "new_energy",
         "name": "新能源 / 先进制造",
         "keywords": [
             "新能源", "锂电", "锂电池", "光伏", "储能", "风电", "氢能",
@@ -38,6 +39,7 @@ INDUSTRY_FRAMEWORKS = {
         ],
     },
     "tmt": {
+        "key": "tmt",
         "name": "TMT / 互联网科技",
         "keywords": [
             "互联网", "软件", "saas", "云计算", "ai", "人工智能", "大模型",
@@ -53,6 +55,7 @@ INDUSTRY_FRAMEWORKS = {
         ],
     },
     "consumer": {
+        "key": "consumer",
         "name": "大消费 / 消费服务",
         "keywords": [
             "消费", "零售", "食品", "饮料", "白酒", "家电", "服装", "美妆",
@@ -71,6 +74,7 @@ INDUSTRY_FRAMEWORKS = {
 
 # 通用框架（课题匹配不到任何行业时兜底）
 GENERIC_FRAMEWORK = {
+    "key": "generic",
     "name": "通用行业研究",
     "sections": [
         {"title": "一、行业概览", "question": "市场规模、增速、现状", "metrics": ["市场规模", "增速"], "min_evidence": 2, "min_tier": "B"},
@@ -122,6 +126,7 @@ def build_plan(topic: str, framework: dict = None) -> dict:
     return {
         "topic": topic,
         "framework_name": fw["name"],
+        "framework_key": fw.get("key", "generic"),
         "outline": outline,
         "research_requirements": research_requirements,
     }
