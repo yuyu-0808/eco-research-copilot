@@ -8,7 +8,7 @@ import os
 import time
 
 from src.orchestrator import ResearchOrchestrator
-from src.utils.checkpoint import Checkpoint, PauseRequested
+from src.utils.checkpoint import Checkpoint, PauseRequested, StopRequested
 from src.ui.helpers import save_result
 from src.utils.metrics_store import extract_metrics, save_metrics
 from src.utils import db
@@ -35,6 +35,9 @@ def run_research(project_id: str, topic: str, resume: bool = False) -> None:
         _persist_result(project_dir, project_id, topic, orchestrator, duration_sec=time.time() - t0)
     except PauseRequested:
         # 已暂停：checkpoint 记录 paused 状态，等 resume 续跑，不落 result
+        return
+    except StopRequested:
+        # 已终止：checkpoint 记录 stopped 状态，不落 result，不续跑
         return
     except Exception:
         # 失败：checkpoint 记录 failed 状态，向上抛给调度器（线程结束）

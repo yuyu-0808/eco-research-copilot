@@ -16,6 +16,10 @@ class PauseRequested(Exception):
     """协作式暂停信号：在阶段边界抛出，由调用方捕获后优雅退出。"""
 
 
+class StopRequested(Exception):
+    """协作式终止信号：在阶段边界抛出，任务彻底停止（不续跑）。"""
+
+
 class Checkpoint:
     # 流水线六个阶段（顺序固定）：课题架构 / 信源检索 / 事实稽核 / 结构化提炼 / 内容撰写 / 渲染排版
     STAGES = ("architect", "research", "verify", "structure", "write", "render")
@@ -32,8 +36,9 @@ class Checkpoint:
         return {
             "version": 1,
             "topic": topic,
-            "status": "running",   # running | paused | completed | failed
+            "status": "running",   # running | paused | completed | failed | stopped
             "pause_requested": False,
+            "stop_requested": False,
             "current_stage": "architect",
             "review_stage": "",    # 人工确认检查点："" | framework | materials | draft
             "framework_key": "",   # 用户选择的行业框架 key；空 = 自动匹配
@@ -57,6 +62,7 @@ class Checkpoint:
         state.setdefault("topic", "")
         state.setdefault("status", "running")
         state.setdefault("pause_requested", False)
+        state.setdefault("stop_requested", False)
         state.setdefault("current_stage", "architect")
         state.setdefault("review_stage", "")
         state.setdefault("framework_key", "")
@@ -130,6 +136,21 @@ class Checkpoint:
         state["status"] = "running"
         self.save(state)
 
+    def request_stop(self) -> None:
+        """请求终止任务：置 stop_requested，orchestrator 在阶段边界彻底停止（不续跑）。"""
+        state = self.load()
+        state["stop_requested"] = True
+        self.save(state)
+
+    def clear_stop(self) -> None:
+        """清除终止信号（重跑 / 复位时调用）。"""
+        state = self.load()
+        state["stop_requested"] = False
+        self.save(state)
+
+    def stop_requested(self) -> bool:
+        return self.load().get("stop_requested", False)
+
     # ---- 人工确认检查点（三阶段人机协同） ----
     def set_review(self, stage_name: str) -> None:
         """在指定确认点停下等待人工确认：记录 review_stage 并置为 paused。"""
@@ -151,7 +172,10 @@ class Checkpoint:
         return self.load().get("pause_requested", False)
 
     def check_pause(self) -> None:
-        """阶段边界调用：若收到暂停请求，置状态为 paused 并抛出 PauseRequested。"""
+        """阶段边界调用：优先响应终止信号（彻底停止），其次响应暂停请求（可续跑）。"""
+        if self.stop_requested():
+            self.set_status("stopped")
+            raise StopRequested()
         if self.pause_requested():
             self.set_status("paused")
             raise PauseRequested()

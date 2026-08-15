@@ -18,6 +18,7 @@ export function StatusBadge({ status }) {
   if (status === 'running') return <span className="badge brand">运行中</span>
   if (status === 'paused') return <span className="badge part">已暂停</span>
   if (status === 'failed') return <span className="badge danger">失败</span>
+  if (status === 'stopped') return <span className="badge danger">已终止</span>
   return <span className="badge part">进行中 / 中断</span>
 }
 

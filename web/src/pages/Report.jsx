@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiGet, apiPost, connectWS } from '../api.js'
+import { apiGet, apiPost, connectWS, getToken } from '../api.js'
 import { splitReport, extractHeadings, renderMarkdown, tableToHtml } from '../markdown.js'
 import { chartToOption } from '../charts.js'
 import { Chart, Pipeline, LogBox, TierBadge, StatusBadge } from '../components.jsx'
@@ -77,15 +77,33 @@ export default function Report({ id }) {
           </div>
           <div className="muted" style={{ fontSize: 13 }}>项目 {id}</div>
         </div>
+        {result && !running && (
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+            {result.docx_path && (
+              <a className="btn" href={`/api/projects/${id}/export/docx?token=${encodeURIComponent(getToken())}`} download>导出 Word</a>
+            )}
+            <a className="btn" href={`/api/projects/${id}/export/pdf?token=${encodeURIComponent(getToken())}`} download>导出 PDF</a>
+            <a className="btn" href={`/api/projects/${id}/export/markdown?token=${encodeURIComponent(getToken())}`} download>导出 Markdown</a>
+          </div>
+        )}
         <StatusBadge status={status} />
       </div>
 
       {ck.review_stage ? (
         <ReviewPanel projectId={id} reviewStage={ck.review_stage} onDone={load} />
       ) : running ? (
-        <RunningPanel detail={detail} logs={logs} onPause={() => action(`/api/projects/${id}/pause`)} onResume={() => action(`/api/projects/${id}/resume`)} onReset={() => action(`/api/projects/${id}/reset`)} />
+        <RunningPanel detail={detail} logs={logs} onPause={() => action(`/api/projects/${id}/pause`)} onResume={() => action(`/api/projects/${id}/resume`)} onReset={() => action(`/api/projects/${id}/reset`)} onStop={() => action(`/api/projects/${id}/stop`)} />
       ) : result ? (
         <ReportBody result={result} />
+      ) : status === 'stopped' ? (
+        <div className="card" style={{ borderColor: 'var(--danger)', textAlign: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger)', marginBottom: '0.4rem' }}>🛑 任务已终止</div>
+          <div className="muted" style={{ fontSize: 13, marginBottom: '0.8rem' }}>进度已保存，可从头重跑或从某阶段续跑。</div>
+          <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
+            <button className="btn primary" onClick={() => action(`/api/projects/${id}/resume`)}>从断点续跑</button>
+            <button className="btn" onClick={() => action(`/api/projects/${id}/reset`)}>从头重跑</button>
+          </div>
+        </div>
       ) : (
         <div className="empty">该项目尚无报告结果。</div>
       )}
@@ -93,22 +111,38 @@ export default function Report({ id }) {
   )
 }
 
-function RunningPanel({ detail, logs, onPause, onResume, onReset }) {
+function RunningPanel({ detail, logs, onPause, onResume, onReset, onStop }) {
   const ck = detail.checkpoint || {}
   // 阶段状态：优先用 checkpoint 里已完成的阶段推导，日志兜底
   const stages = deriveStages(ck)
+  const doneCount = stages.filter((s) => s === 'done').length
+  const progress = Math.round((doneCount / stages.length) * 100)
   return (
     <div>
       <div className="sec-title">多智能体流水线</div>
       <div className="card">
         <Pipeline stages={stages} />
+        {/* 百分比进度条 */}
+        <div style={{ marginTop: '0.8rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginBottom: '0.3rem' }}>
+            <span>总进度</span>
+            <span>{doneCount}/{stages.length} 阶段 · {progress}%</span>
+          </div>
+          <div style={{ height: 8, background: 'var(--border)', borderRadius: 999, overflow: 'hidden' }}>
+            <div style={{ width: `${progress}%`, height: '100%', background: 'var(--brand)', transition: 'width .4s var(--ease)' }} />
+          </div>
+        </div>
         <div style={{ marginTop: '0.8rem', display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
           {ck.status === 'running' ? (
-            <button className="btn" onClick={onPause}>暂停调研</button>
+            <>
+              <button className="btn" onClick={onPause}>暂停调研</button>
+              <button className="btn" onClick={onStop} style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>终止任务</button>
+            </>
           ) : (
             <>
               <button className="btn primary" onClick={onResume}>继续调研</button>
               <button className="btn" onClick={onReset}>从头重跑</button>
+              <button className="btn" onClick={onStop} style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>终止任务</button>
             </>
           )}
         </div>

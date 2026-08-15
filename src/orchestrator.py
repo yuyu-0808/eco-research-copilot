@@ -1,6 +1,6 @@
 from src.utils.logger import AgentLogger
 from src.utils.config import Config
-from src.utils.checkpoint import Checkpoint, PauseRequested
+from src.utils.checkpoint import Checkpoint, PauseRequested, StopRequested
 from src.agents.architect import ArchitectAgent
 from src.agents.researcher import ResearcherAgent
 from src.agents.auditor import AuditorAgent
@@ -37,7 +37,7 @@ class ResearchOrchestrator:
         for attempt in range(1, max_attempts + 1):
             try:
                 return fn(*args, **kwargs)
-            except PauseRequested:
+            except (PauseRequested, StopRequested):
                 raise
             except Exception as e:
                 if attempt >= max_attempts:
@@ -132,6 +132,10 @@ class ResearchOrchestrator:
 
         except PauseRequested:
             self.logger.log_event("Orchestrator", "PAUSED", "⏸️ 收到暂停请求，进度已保存，可随时继续。")
+            raise
+
+        except StopRequested:
+            self.logger.log_event("Orchestrator", "STOPPED", "🛑 收到终止请求，任务已停止。")
             raise
 
         except Exception as e:

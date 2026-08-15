@@ -49,13 +49,23 @@ def pause(project_id: str):
     return ok({"project_id": project_id, "status": "pause_requested"})
 
 
+@router.post("/{project_id}/stop")
+def stop(project_id: str):
+    """终止任务：置 stop_requested + 从队列移除，orchestrator 在阶段边界彻底停止。"""
+    d = _dir(project_id)
+    Checkpoint(d).request_stop()
+    queue.cancel(project_id)
+    return ok({"project_id": project_id, "status": "stop_requested"})
+
+
 @router.post("/{project_id}/resume")
 def resume(project_id: str):
-    """从断点续跑：清除暂停信号，以 resume=True 重新入队。"""
+    """从断点续跑：清除暂停/终止信号，以 resume=True 重新入队。"""
     d = _dir(project_id)
     topic = _topic(project_id, d)
     ck = Checkpoint(d)
     ck.clear_pause()
+    ck.clear_stop()
     if not queue.submit(project_id, run_research, project_id, topic, True):
         raise HTTPException(409, "该项目已有任务在运行")
     return ok({"project_id": project_id, "status": "resumed"})
@@ -67,6 +77,7 @@ def reset(project_id: str, payload: dict = None):
     d = _dir(project_id)
     stage = ((payload or {}).get("stage") or "").strip()
     ck = Checkpoint(d)
+    ck.clear_stop()
     if stage and stage in ck.STAGES:
         ck.reset_from(stage)
     else:
