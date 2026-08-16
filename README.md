@@ -104,7 +104,7 @@ flowchart LR
 
 | 工作台 | 新建调研 | 报告预览 |
 |:---:|:---:|:---:|
-| ![工作台](docs/screenshots/dashboard.png) | ![新建调研](docs/screenshots/new-research.png) | ![报告预览](docs/screenshots/report.png) |
+| ![工作台](docs/screenshots/dashboard.png) | ![新建调研](docs/screenshots/new-research.jpg) | ![报告预览](docs/screenshots/report.jpg) |
 
 ## 快速开始
 
