@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS metrics (
     framework_key TEXT NOT NULL,
     metric TEXT NOT NULL,
     metric_label TEXT,
+    subject TEXT,
     value TEXT,
     value_norm REAL,
     unit TEXT,
@@ -100,6 +101,19 @@ def _ensure_init():
         _initialized = True
         _migrate_metrics_json()
         _migrate_projects_columns()
+        _migrate_metrics_columns()
+
+
+def _migrate_metrics_columns():
+    """为旧库补 metrics 表缺失的列（subject）。"""
+    conn = _connect()
+    try:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(metrics)")]
+        if cols and "subject" not in cols:
+            conn.execute("ALTER TABLE metrics ADD COLUMN subject TEXT")
+            conn.commit()
+    finally:
+        conn.close()
 
 
 def _migrate_projects_columns():
@@ -167,13 +181,14 @@ def _insert_metrics(conn, framework_key: str, entries: list, report_id: str) -> 
         vn_r = round(vn, 4) if isinstance(vn, (int, float)) else None
         cur = conn.execute(
             """INSERT OR IGNORE INTO metrics
-               (framework_key, metric, metric_label, value, value_norm, unit, period, year,
+               (framework_key, metric, metric_label, subject, value, value_norm, unit, period, year,
                 source_title, source_url, source_tier, publisher, report_id, saved_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 framework_key,
                 en.get("metric"),
                 en.get("metric_label"),
+                en.get("subject"),
                 en.get("value"),
                 vn_r,
                 en.get("unit"),
@@ -227,7 +242,7 @@ def metrics_framework_keys() -> list:
 
 
 _METRICS_EDITABLE = {
-    "framework_key", "metric", "metric_label", "value", "value_norm", "unit",
+    "framework_key", "metric", "metric_label", "subject", "value", "value_norm", "unit",
     "period", "year", "source_title", "source_url", "source_tier", "publisher",
 }
 

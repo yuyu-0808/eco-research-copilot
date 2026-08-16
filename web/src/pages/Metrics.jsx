@@ -33,6 +33,7 @@ export default function Metrics() {
   const [editing, setEditing] = useState(null)
   const [trend, setTrend] = useState(null)
   const [trendMetric, setTrendMetric] = useState('')
+  const [selected, setSelected] = useState(new Set())
 
   function load() {
     const qs = new URLSearchParams()
@@ -85,6 +86,29 @@ export default function Metrics() {
   if (industry) exportQs.set('framework_key', industry)
   exportQs.set('token', getToken())
 
+  // 全选 / 反选 / 批量删除
+  const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.id))
+  function toggleAll() {
+    setSelected(allChecked ? new Set() : new Set(rows.map((r) => r.id)))
+  }
+  function toggleOne(id) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  async function removeSelected() {
+    if (selected.size === 0) return
+    if (!window.confirm(`确认删除选中的 ${selected.size} 条指标？此操作不可恢复。`)) return
+    try {
+      await apiPost('/api/metrics/batch_delete', { ids: [...selected] })
+      setSelected(new Set())
+      load()
+    } catch (e) { setErr(e.message) }
+  }
+
   const trendChart = trend ? {
     type: 'line',
     labels: trend.series.map((s) => String(s.year)),
@@ -100,6 +124,11 @@ export default function Metrics() {
         <div className="sec-title" style={{ margin: 0 }}>指标库 · 数据飞轮</div>
         <div style={{ flex: 1 }} />
         <button className="btn primary" onClick={openCreate}>＋ 手动录入</button>
+        {selected.size > 0 && (
+          <button className="btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={removeSelected}>
+            删除选中 ({selected.size})
+          </button>
+        )}
         <a className="btn" href={`/api/metrics/export?${exportQs.toString()}`} download>导出 Excel</a>
       </div>
 
@@ -157,14 +186,19 @@ export default function Metrics() {
           <table className="report-table" style={{ margin: 0 }}>
             <thead>
               <tr>
-                <th>行业</th><th>指标</th><th>数值</th><th>单位</th><th>时间</th>
+                <th style={{ width: 36 }}>
+                  <input type="checkbox" checked={allChecked} onChange={toggleAll} />
+                </th>
+                <th>行业</th><th>主体</th><th>指标</th><th>数值</th><th>单位</th><th>时间</th>
                 <th>信源</th><th>来源</th><th>操作</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.id ?? i}>
+                  <td><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} /></td>
                   <td>{r.framework_key || '—'}</td>
+                  <td>{r.subject || '—'}</td>
                   <td>{r.metric_label || METRIC_LABEL[r.metric] || r.metric}</td>
                   <td>{r.value}</td>
                   <td>{r.unit || '—'}</td>
@@ -196,6 +230,7 @@ function MetricForm({ frameworks, editing, onClose, onSaved }) {
   const [form, setForm] = useState(() => editing ? {
     framework_key: editing.framework_key || '',
     metric: editing.metric || '',
+    subject: editing.subject || '',
     value: editing.value || '',
     unit: editing.unit || '',
     period: editing.period || '',
@@ -204,7 +239,7 @@ function MetricForm({ frameworks, editing, onClose, onSaved }) {
     source_url: editing.source_url || '',
     publisher: editing.publisher || '',
   } : {
-    framework_key: '', metric: '', value: '', unit: '', period: '',
+    framework_key: '', metric: '', subject: '', value: '', unit: '', period: '',
     source_tier: 'D', source_title: '', source_url: '', publisher: '',
   })
   const [saving, setSaving] = useState(false)
@@ -249,6 +284,10 @@ function MetricForm({ frameworks, editing, onClose, onSaved }) {
             <option value="">选择指标</option>
             {METRIC_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <label>主体（公司/产品）</label>
+          <input value={form.subject} onChange={set('subject')} placeholder="如 宁德时代 / x86 CPU" />
         </div>
         <div className="field" style={{ margin: 0 }}>
           <label>数值 *</label>

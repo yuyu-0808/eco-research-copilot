@@ -73,7 +73,7 @@ def _all_keys() -> list:
 
 def add_metric_manual(framework_key: str, metric: str, value: str, period: str = "",
                       source_tier: str = "D", source_title: str = "", source_url: str = "",
-                      publisher: str = "", unit: str = "") -> int:
+                      publisher: str = "", unit: str = "", subject: str = "") -> int:
     """手动录入一条指标（自动归一化 + 年份提取），返回新增条数（0=未入库）。
 
     framework_key 为 generic 或空时拒绝入库（同自动沉淀策略）。
@@ -87,6 +87,7 @@ def add_metric_manual(framework_key: str, metric: str, value: str, period: str =
     entry = {
         "metric": metric,
         "metric_label": metric_label(metric),
+        "subject": subject,
         "value": value,
         "value_norm": nv.value,
         "unit": unit or nv.unit,
@@ -101,7 +102,7 @@ def add_metric_manual(framework_key: str, metric: str, value: str, period: str =
 
 
 _EDITABLE_FIELDS = {
-    "framework_key", "metric", "value", "unit", "period", "year",
+    "framework_key", "metric", "subject", "value", "unit", "period", "year",
     "source_title", "source_url", "source_tier", "publisher",
 }
 

@@ -12,6 +12,10 @@ __pycache__/
 .env.local
 .env.*.local
 
+# === 个人隐私（简历等，绝不提交） ===
+简历/
+~WRL*.tmp
+
 # === 运行时产物（运行后自动生成） ===
 projects/
 

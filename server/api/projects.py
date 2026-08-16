@@ -108,6 +108,23 @@ def delete_project(project_id: str):
     return ok({"deleted": project_id})
 
 
+@router.post("/batch_delete")
+def batch_delete_projects(payload: dict = None):
+    """批量删除项目（接受 ids 数组）。"""
+    ids = (payload or {}).get("ids") or []
+    if not ids:
+        raise HTTPException(400, "ids 不能为空")
+    deleted = 0
+    skipped = 0
+    for pid in ids:
+        try:
+            delete_project(pid)
+            deleted += 1
+        except HTTPException:
+            skipped += 1  # 运行中的项目跳过，其余照删
+    return ok({"deleted": deleted, "skipped": skipped})
+
+
 @router.post("/cleanup")
 def cleanup_projects(payload: dict = None):
     """清理 N 天前创建且已结束（非运行/暂停中）的项目，释放磁盘与 SQLite。"""

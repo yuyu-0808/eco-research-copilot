@@ -35,6 +35,7 @@ export default function Dashboard({ go }) {
   const [err, setErr] = useState('')
   const [toast, setToast] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  const [selected, setSelected] = useState(new Set())
 
   function notify(msg) {
     setToast(msg)
@@ -97,6 +98,30 @@ export default function Dashboard({ go }) {
   const m = data.metrics || {}
   const s = stats || {}
 
+  // 全选 / 反选 / 批量删除
+  const allChecked = projects.length > 0 && projects.every((p) => selected.has(p.id))
+  function toggleAll() {
+    setSelected(allChecked ? new Set() : new Set(projects.map((p) => p.id)))
+  }
+  function toggleOne(id) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  async function removeSelected() {
+    if (selected.size === 0) return
+    if (!window.confirm(`确认删除选中的 ${selected.size} 个项目？此操作不可恢复。`)) return
+    try {
+      await apiPost('/api/projects/batch_delete', { ids: [...selected] })
+      setSelected(new Set())
+      load()
+      notify(`已删除 ${selected.size} 个项目`)
+    } catch (e) { setErr(e.message) }
+  }
+
   return (
     <div>
       {toast && <div className="toast">✓ {toast}</div>}
@@ -118,7 +143,17 @@ export default function Dashboard({ go }) {
 
       <div className="sec-title" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
         调研项目
+        {projects.length > 0 && (
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>
+            <input type="checkbox" checked={allChecked} onChange={toggleAll} /> 全选
+          </label>
+        )}
         <div style={{ flex: 1 }} />
+        {selected.size > 0 && (
+          <button className="btn" style={{ fontSize: 12, color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={removeSelected}>
+            删除选中 ({selected.size})
+          </button>
+        )}
         <button className="btn" onClick={() => setShowArchived(!showArchived)} style={{ fontSize: 12 }}>
           {showArchived ? '返回活动项目' : '查看归档'}
         </button>
@@ -139,6 +174,9 @@ export default function Dashboard({ go }) {
         <div className="proj-list">
           {projects.map((p) => (
             <div className="proj-row" key={p.id}>
+              <div style={{ display: 'flex', alignItems: 'center', paddingRight: '0.6rem' }}>
+                <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)} />
+              </div>
               <div className="proj-main">
                 <div className="proj-topic">
                   {p.topic || p.id}

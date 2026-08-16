@@ -59,6 +59,7 @@ def create_metric(payload: dict = None):
         source_url=p.get("source_url", ""),
         publisher=p.get("publisher", ""),
         unit=p.get("unit", ""),
+        subject=(p.get("subject") or "").strip(),
     )
     if not added:
         raise HTTPException(400, "指标录入失败：数值无法归一化，或与已有条目重复")
@@ -79,6 +80,22 @@ def remove_metric(metric_id: int):
     if not delete_metric(metric_id):
         raise HTTPException(404, "指标不存在")
     return ok({"deleted": metric_id})
+
+
+@router.post("/batch_delete")
+def batch_delete_metrics(payload: dict = None):
+    """批量删除指标（接受 ids 数组）。"""
+    ids = (payload or {}).get("ids") or []
+    if not ids:
+        raise HTTPException(400, "ids 不能为空")
+    deleted = 0
+    for mid in ids:
+        try:
+            if delete_metric(int(mid)):
+                deleted += 1
+        except (ValueError, TypeError):
+            continue
+    return ok({"deleted": deleted})
 
 
 @router.get("/export")
