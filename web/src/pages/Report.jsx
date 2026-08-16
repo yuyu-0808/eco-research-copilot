@@ -26,6 +26,7 @@ export default function Report({ id }) {
   const [detail, setDetail] = useState(null)
   const [logs, setLogs] = useState([])
   const [err, setErr] = useState('')
+  const [toast, setToast] = useState('')
 
   async function load() {
     try {
@@ -38,24 +39,30 @@ export default function Report({ id }) {
 
   useEffect(() => { load() }, [id])
 
-  // 运行中 → 连 WebSocket 收进度
+  // 进入页面即连 WebSocket（不依赖 status，解决新建项目时 checkpoint 尚未就绪）
+  // 每次推送都刷新 detail，让进度条/状态/按钮随 checkpoint 实时更新（修进度条卡死 + 无继续按钮）
   useEffect(() => {
-    if (!detail) return
-    const status = detail.checkpoint?.status
-    if (status === 'running' || status === 'paused') {
-      const ws = connectWS(id, (msg) => {
-        setLogs((prev) => [...prev, ...(msg.new_logs || [])])
-        if (msg.status === 'completed' || msg.status === 'failed') {
-          ws.close()
-          load()
-        }
-      })
-      return () => ws.close()
-    }
-  }, [detail?.checkpoint?.status])
+    const ws = connectWS(id, (msg) => {
+      setLogs((prev) => [...prev, ...(msg.new_logs || [])])
+      load()
+      if (msg.status === 'completed' || msg.status === 'failed') {
+        ws.close()
+      }
+    })
+    return () => ws.close()
+  }, [id])
 
-  async function action(path) {
-    try { await apiPost(path); load() } catch (e) { setErr(e.message) }
+  function flash(msg) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3000)
+  }
+
+  async function action(path, notice) {
+    try {
+      await apiPost(path)
+      if (notice) flash(notice)
+      load()
+    } catch (e) { setErr(e.message) }
   }
 
   if (err) return <div className="card">加载失败：{err}</div>
@@ -64,10 +71,21 @@ export default function Report({ id }) {
   const ck = detail.checkpoint || {}
   const result = detail.result
   const status = ck.status
-  const running = status === 'running' || status === 'paused'
+  // 用 detail.running（后端 queue.is_running）兜底，避免 ck.status 为空时误判
+  const running = detail.running || status === 'running' || status === 'paused'
+
+  // 启动中：项目刚创建，orchestrator.run 异步入队，checkpoint 还没写完
+  if (!ck.status && !result && !detail.running) {
+    return <div className="empty"><span className="spin" /> 启动中…</div>
+  }
 
   return (
     <div>
+      {toast && (
+        <div style={{ position: 'fixed', top: 80, right: 20, zIndex: 1000, background: 'var(--brand)', color: '#fff', padding: '0.6rem 1rem', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.15)', fontSize: 13 }}>
+          {toast}
+        </div>
+      )}
       {/* 顶部悬浮操作栏 */}
       <div className="report-toolbar">
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -91,7 +109,11 @@ export default function Report({ id }) {
       {ck.review_stage ? (
         <ReviewPanel projectId={id} reviewStage={ck.review_stage} onDone={load} />
       ) : running ? (
-        <RunningPanel detail={detail} logs={logs} onPause={() => action(`/api/projects/${id}/pause`)} onResume={() => action(`/api/projects/${id}/resume`)} onReset={() => action(`/api/projects/${id}/reset`)} onStop={() => action(`/api/projects/${id}/stop`)} />
+        <RunningPanel detail={detail} logs={logs}
+          onPause={() => action(`/api/projects/${id}/pause`, '已请求暂停，任务将在当前步骤完成后停下')}
+          onResume={() => action(`/api/projects/${id}/resume`, '已继续')}
+          onReset={() => action(`/api/projects/${id}/reset`, '已从头重跑')}
+          onStop={() => action(`/api/projects/${id}/stop`, '已请求终止')} />
       ) : result ? (
         <ReportBody result={result} />
       ) : status === 'stopped' ? (
