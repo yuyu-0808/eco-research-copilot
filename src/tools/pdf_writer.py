@@ -13,11 +13,13 @@ from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable,
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, Image,
 )
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+
+from src.tools.docx_writer import render_chart_png
 
 _FONT_DIR = "C:/Windows/Fonts"
 _HEAD_FONT = "SimHei"   # 黑体（标题）
@@ -170,10 +172,33 @@ def generate_pdf(ai_data: dict, out_path: str) -> str:
     lines = md.split("\n")
     i = 0
     para = []
+    charts = ai_data.get("charts", []) or []
+    temp_files = []
     while i < len(lines):
         raw = lines[i]
         line = raw.rstrip()
         stripped = line.strip()
+
+        # 图表占位符：调用 QuickChart 生成 PNG，reportlab Image 插入
+        m_chart = re.match(r"^\[\[CHART:(\d+)\]\]\s*$", stripped)
+        if m_chart:
+            if para:
+                story.append(Paragraph(_placeholder(_inline("<br/>".join(para))), st["body"]))
+                para = []
+            idx = int(m_chart.group(1)) - 1
+            if 0 <= idx < len(charts):
+                chart = charts[idx]
+                title_c = chart.get("title", f"图{idx + 1}")
+                img_path = render_chart_png(chart, idx + 1, out_dir)
+                if img_path:
+                    temp_files.append(img_path)
+                    story.append(Paragraph(_inline(title_c), st["h3"]))
+                    story.append(Image(img_path, width=14 * cm, height=8 * cm))
+                    story.append(Spacer(1, 0.4 * cm))
+                else:
+                    story.append(Paragraph(_placeholder(f"【图 {idx + 1}（生成失败）】"), st["body"]))
+            i += 1
+            continue
 
         # 表格块
         if stripped.startswith("|") and "|" in stripped[1:]:
@@ -233,6 +258,14 @@ def generate_pdf(ai_data: dict, out_path: str) -> str:
             if url:
                 line += f'　<font color="#1E3A8A">{url}</font>'
             story.append(Paragraph(_inline(line), st["ref"]))
+
+    # 清理临时图表文件
+    for f in temp_files:
+        try:
+            if os.path.exists(f):
+                os.remove(f)
+        except OSError:
+            pass
 
     doc.build(story)
     return out_path

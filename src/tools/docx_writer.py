@@ -13,6 +13,35 @@ from docx.opc.constants import RELATIONSHIP_TYPE
 from src.utils.config import Config
 
 
+def render_chart_png(chart: dict, index: int, output_dir: str) -> str:
+    """用 QuickChart API 生成图表 PNG，返回文件路径（失败返回空字符串）。
+
+    供 docx / pdf 导出共用。文件保存在 output_dir/temp_chart_{index}.png，
+    调用方负责后续插入（docx 用 add_picture，pdf 用 reportlab Image）。
+    """
+    chart_type = chart.get("type", "line")
+    if chart_type not in ("line", "bar", "pie"):
+        chart_type = "line"
+    title = chart.get("title", f"图{index}")
+    legend_label = chart.get("label", "")
+    labels = chart.get("labels", [])
+    data = chart.get("data", [])
+    if not data:
+        return ""
+    img_path = os.path.join(output_dir, f"temp_chart_{index}.png")
+    try:
+        config = DocxWriter._build_chart_config(chart_type, labels, data, title, legend_label)
+        encoded = urllib.parse.quote(json.dumps(config, ensure_ascii=False))
+        resp = requests.get(f"https://quickchart.io/chart?c={encoded}", timeout=30)
+        with open(img_path, "wb") as f:
+            f.write(resp.content)
+        if not resp.content:
+            return ""
+        return img_path
+    except Exception:
+        return ""
+
+
 class DocxWriter:
     # 学术论文格式常量
     CN_FONT = '宋体'
@@ -133,7 +162,8 @@ class DocxWriter:
         paragraph._p.append(hyperlink)
 
     # ---------- 图表生成 ----------
-    def _build_chart_config(self, chart_type, labels, data, title, legend_label=None):
+    @staticmethod
+    def _build_chart_config(chart_type, labels, data, title, legend_label=None):
         colors = ["#5470C6", "#91CC75", "#FAC858", "#EE6666", "#73C0DE", "#3BA272", "#FC8452", "#9A60B4"]
         legend = legend_label or title  # 图例用 label（指标+单位），为空则回退 title
         dataset = {"data": data}
@@ -157,28 +187,10 @@ class DocxWriter:
 
     def _add_chart(self, doc, chart, index):
         """生成一张图（QuickChart）并插入，返回临时图片路径"""
-        chart_type = chart.get("type", "line")
-        if chart_type not in ("line", "bar", "pie"):
-            chart_type = "line"
+        img_path = render_chart_png(chart, index, self.project_dir)
+        if not img_path:
+            return None
         title = chart.get("title", f"图{index}")
-        legend_label = chart.get("label", "")
-        labels = chart.get("labels", [])
-        data = chart.get("data", [])
-        if not data:
-            return None
-
-        img_path = os.path.join(self.project_dir, f'temp_chart_{index}.png')
-        try:
-            config = self._build_chart_config(chart_type, labels, data, title, legend_label)
-            encoded = urllib.parse.quote(json.dumps(config, ensure_ascii=False))
-            resp = requests.get(f"https://quickchart.io/chart?c={encoded}", timeout=30)
-            with open(img_path, 'wb') as f:
-                f.write(resp.content)
-            if not resp.content:
-                return None
-        except Exception:
-            return None
-
         self._add_caption(doc, title)
         p = doc.add_paragraph()
         self._set_para(p, align=WD_ALIGN_PARAGRAPH.CENTER, first_indent_chars=0, space_after=12)
