@@ -233,7 +233,8 @@ class AuditorAgent:
             kept = []
             seen_values = set()
             for e in items:
-                v = (getattr(e, "value", "") or "").strip()
+                # value 可能是 int/float（LLM 提炼出纯数字），先 str 再 strip，避免 'int' 无 strip 报错
+                v = str(getattr(e, "value", "") or "").strip()
                 if v and v in seen_values:
                     continue  # 同组内同数值的冗余条目跳过
                 if v:

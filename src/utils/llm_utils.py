@@ -113,10 +113,12 @@ def parse_json_response(raw_content: str):
         raise
 
 
-def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retries=3, temperature=0.2, max_tokens=8192):
+def call_llm(client, model, logger, agent_name, prompt, need_json=True, max_retries=3, temperature=0.2, max_tokens=None):
     """统一调用大模型：重试 + 指数退避 + 速率限制 + 截断检测 + 空值判断 + JSON 解析 + 备用模型降级"""
     global _last_api_call_time
     last_err = None
+    if max_tokens is None:
+        max_tokens = getattr(Config, 'MAX_TOKENS', 16384)
     for attempt in range(max_retries):
         try:
             logger.log_event(agent_name, "ACTION", f"第 {attempt+1} 次请求大模型...")
